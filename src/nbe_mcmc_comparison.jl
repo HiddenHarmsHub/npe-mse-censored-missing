@@ -30,7 +30,6 @@ function run_comparison(K, m, intercept_dist, beta_dist, gamma_dist; n_reps = 10
         m = m
     )
 
-    n_reps = 10
     θ_test = sample_nbe(n_reps)
     Z_test = simulate_nbe(θ_test, 1)
     assessment = assess(estimator, θ_test, Z_test, probs = [0.025, 0.975])
@@ -57,7 +56,7 @@ function run_comparison(K, m, intercept_dist, beta_dist, gamma_dist; n_reps = 10
     X = one_hot_encode(K)
     for k in 1:n_reps
         input_y = Int64.(floor.(exp.(vec(Z_test[k]))))
-        m = mse_model(input_y, X)
+        m = mse_model(input_y, X, intercept_dist, beta_dist, gamma_dist)
         chains = sample(
             m, 
             NUTS(), 
@@ -94,4 +93,7 @@ Ks = [3, 4, 5, 6]
 output_path = joinpath("output", "mcmc_nbe_comparison")
 mkpath(output_path)
 
-run_comparison(7, 50, intercept_dist, beta_dist, gamma_dist, n_reps = 2, savepath = joinpath(output_path, "comparison_test.csv"))
+Folds.map(
+    (K, m) -> run_comparison(K, m, intercept_dist, beta_dist, gamma_dist, n_reps = 100, savepath = joinpath(output_path, "comparison_K$(K)_m$(m).csv")), 
+    collect(Base.product(Ks, ms))
+)

@@ -150,6 +150,4 @@ function generate_data_nbe(params, m)
 end
 
 
-## Neural estimation
-sample_nbe(n_reps) = hcat([generate_parameters_nbe(K, intercept_dist, beta_dist, gamma_dist) for _ in 1:n_reps]...)
-simulate_nbe(θ, m) = [generate_data_nbe(params, m) for params in eachcol(θ)]
+
