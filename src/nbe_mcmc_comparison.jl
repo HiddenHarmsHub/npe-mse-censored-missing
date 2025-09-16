@@ -1,5 +1,5 @@
 using Pkg; Pkg.activate(".")
-using Distributions, Random, Optim, DataFrames, Plots, CSV, Combinatorics, Turing, LinearAlgebra, StatsPlots, NeuralEstimators, Flux
+using Distributions, Random, Optim, DataFrames, Plots, CSV, Combinatorics, Turing, LinearAlgebra, StatsPlots, NeuralEstimators, Flux, Folds
 
 include("mse_functions.jl")
 
