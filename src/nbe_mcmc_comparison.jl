@@ -94,6 +94,6 @@ output_path = joinpath("output", "mcmc_nbe_comparison")
 mkpath(output_path)
 
 Folds.map(
-    (K, m) -> run_comparison(K, m, intercept_dist, beta_dist, gamma_dist, n_reps = 100, savepath = joinpath(output_path, "comparison_K$(K)_m$(m).csv")), 
-    collect(Base.product(Ks, ms))
+    x -> run_comparison(x[1], x[2], intercept_dist, beta_dist, gamma_dist, n_reps = 100, savepath = joinpath(output_path, "comparison_K$(x[1])_m$(x[2]).csv")), 
+    vec(collect(Base.product(Ks, ms)))
 )
