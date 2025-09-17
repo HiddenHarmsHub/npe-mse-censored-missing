@@ -26,10 +26,9 @@ w = 128  # width of each hidden layer
 # Combine into a DeepSet
 network = DeepSet(ψ, ϕ)
 
+load_estimator = true
 
-load_data = true
-
-if load_data
+if load_estimator
     @load joinpath("output", "npe_model_final.bson") estimator
 else
     # Initialise the estimator
@@ -100,16 +99,12 @@ post_samples = sampleposterior(estimator, log.(bernard_data .+ 1), 20000)
 ## Compare with turing
 
 ## Now use MCMC to infer parameters
-
-
-
-
 m = mse_model(y_bernard, X_bernard, intercept_dist, beta_dist, gamma_dist)
 mcmc_chains = Turing.sample(
     m, 
     NUTS(), 
     MCMCThreads(), 
-    20000, 
+    5000, 
     4, 
     progress = false,
     parallel = false
@@ -132,7 +127,7 @@ histogram(
 )
 
 
-MLE_pars = ["intercept", "beta[1]", "betas[2]", "betas[3]", "betas[4]", "betas[5]"]
+MLE_pars = ["intercept", "beta_1", "beta_2", "beta_3", "beta_4", "beta_5"]
 MLEs = [9.05, -5.09, -2.9, -2.1, -2.5, -3.3]
 
 MLE_estimates = Dict(
@@ -140,6 +135,31 @@ MLE_estimates = Dict(
 )
 
 
-bernard_main_plot_list, bernard_gamma_plot_list = compare_npe_mcmc_posteriors(res, post_samples, MLE_estimates)
+bernard_main_plot_list, bernard_gamma_plot_list = compare_npe_mcmc_posteriors(
+    res, 
+    post_samples, 
+    MLE_estimates,
+    linelabel = "MLE"
+)
 plot(bernard_main_plot_list..., layout = (2, 3), size = (900, 600))
 
+
+dark_number_ppd_npe = rand.(Poisson.(exp.(post_samples[1, :])))
+dark_number_ppd_mcmc = rand.(Poisson.(exp.(res[:, Symbol("intercept")])))
+
+density(
+    dark_number_ppd_npe,
+    label = "NPE",
+    xlabel = "Dark Number",
+    ylabel = "Density",
+    title = "Posterior Predictive of Dark Number",
+    legend = :topright,
+    normalize = true,
+    alpha = 0.9,
+    xformatter = x -> @sprintf("%.0f", x)  # Disable scientific notation
+)
+density!(
+    dark_number_ppd_mcmc,
+    label = "MCMC",
+    alpha = 0.5
+)
