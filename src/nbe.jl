@@ -16,30 +16,40 @@ simulate_nbe(θ, m) = [generate_data_nbe(params, m) for params in eachcol(θ)]
 n_data = K + binomial(K, 2)
 n_pars = 1 + n_data
 
-w = 128  # width of each hidden layer 
+load_estimator = true
 
-# Inner and outer networks
-ψ = Chain(Dense(n_data, w, relu), Dense(w, n_pars, relu))
-ϕ = Chain(Dense(n_pars, w, relu), Dense(w, n_pars))
+if load_estimator
+    @load joinpath("output", "nbe_model_final.bson") estimator
+    println("Loaded existing estimator")
+else
+    w = 128  # width of each hidden layer 
 
-# Combine into a DeepSet
-network = DeepSet(ψ, ϕ)
+    # Inner and outer networks
+    ψ = Chain(Dense(n_data, w, relu), Dense(w, n_pars, relu))
+    ϕ = Chain(Dense(n_pars, w, relu), Dense(w, n_pars))
 
-estimator = PointEstimator(network)
+    # Combine into a DeepSet
+    network = DeepSet(ψ, ϕ)
 
-m = 50
-estimator = train(
-    estimator, 
-    sample_nbe, 
-    simulate_nbe, 
-    m = m
-)
+    estimator = PointEstimator(network)
+
+    m = 50
+    estimator = train(
+        estimator, 
+        sample_nbe, 
+        simulate_nbe, 
+        m = m
+    )
+
+    @save joinpath("output", "nbe_model_final.bson") estimator
+end
 
 
 ## validation checking
 θ_test = sample_nbe(1000)
 Z_test = simulate_nbe(θ_test, m)
 assessment = assess(estimator, θ_test, Z_test, probs = [0.025, 0.975])
+
 
 ## check on a fixed parameter set
 θ_fixed = sample_nbe(1)
