@@ -1,91 +1,74 @@
 using Pkg; Pkg.activate(".")
-using Distributions, Random, NeuralEstimators, Flux, StatsPlots
+using Distributions, Random, NeuralEstimators, Flux, StatsPlots, DataFrames, Optim
 using BSON: @save, @load
 
-function generate_parameters(K::Int, intercept_dist, beta_dist, gamma_dist)
-    intercept = rand(intercept_dist)
-    betas = rand(beta_dist, K)
-    gammas = rand(gamma_dist, binomial(K, 2))
-    par_estimates = vcat(
-        intercept,
-        betas,
-        gammas
-    )
-    return par_estimates
-end
+include("mse_functions.jl")
 
-function generate_data(params, m)
-    K = Int(-0.5 + (sqrt(8 * length(params) - 7) / 2))  # Solve for K given length of params
-    intercept = params[1]
-    betas = params[2:1+K]
-    gammas = params[2+K:end]
 
-    Z = zeros(K + binomial(K, 2), m)
-
-    for i in 1:m
-        main_counts = [
-            rand(Poisson(exp(intercept + betas[i]))) for i in 1:K
-        ]
-        
-        pair_counts = [
-            rand(Poisson(exp(intercept + betas[i] + betas[j] + gammas[binomial(K, 2) - binomial(K - i + 1, 2) + (j - i)]))) for i in 1:K-1 for j in i+1:K
-        ]
-        
-        Z[:, i] = vcat(main_counts, pair_counts)
-
-    end
-    return log.(Z .+ 1)  # Log-transform the counts
-end
-
-K = 6
+K = 5
 intercept_dist = Uniform(1, 10)
 beta_dist = Normal(0, 4)
 gamma_dist = Normal(0, 1/5)
 
-sample(n_reps) = hcat([generate_parameters(K, intercept_dist, beta_dist, gamma_dist) for _ in 1:n_reps]...)
-simulate(θ, m) = [generate_data(params, m) for params in eachcol(θ)]
+sample_nbe(n_reps) = hcat([generate_parameters_nbe(K, intercept_dist, beta_dist, gamma_dist) for _ in 1:n_reps]...)
+simulate_nbe(θ, m) = [generate_data_nbe(params, m) for params in eachcol(θ)]
 
-n_pars = 1 + K + binomial(K, 2)
 n_data = K + binomial(K, 2)
+n_pars = 1 + n_data
 
 w = 128  # width of each hidden layer 
 
 # Inner and outer networks
-ψ = Chain(Dense(n_data, w, relu), Dense(w, n_pars, relu))    
-ϕ = Chain(Dense(n_pars, w, relu), Dense(w, n_pars, identity))          
+ψ = Chain(Dense(n_data, w, relu), Dense(w, n_pars, relu))
+ϕ = Chain(Dense(n_pars, w, relu), Dense(w, n_pars))
 
 # Combine into a DeepSet
 network = DeepSet(ψ, ϕ)
 
 estimator = PointEstimator(network)
 
-m = 500
-estimator = train(estimator, sample, simulate, m = m)
-
-@save joinpath("output", "nbe_model.bson") estimator
-
-
-
+m = 50
+estimator = train(
+    estimator, 
+    sample_nbe, 
+    simulate_nbe, 
+    m = m
+)
 
 
 ## validation checking
-θ_test = sample(1000)
-Z_test = simulate(θ_test, m)
+θ_test = sample_nbe(1000)
+Z_test = simulate_nbe(θ_test, m)
 assessment = assess(estimator, θ_test, Z_test, probs = [0.025, 0.975])
 
+## check on a fixed parameter set
+θ_fixed = sample_nbe(1)
+n_reps = 1000
+nbe_estimates = map(1:n_reps) do i
+    Z_fixed = simulate_nbe(θ_fixed, 1)
+    return vec(NeuralEstimators.estimate(estimator, Z_fixed))
+end |> (y -> hcat(y...))
 
+plot_nbe_estimates(nbe_estimates, θ_fixed, param_max = 6)
 
-bias(assessment)      
-rmse(assessment)     
-risk(assessment)     
+n_sims = 1000
+par_names = ["intercept"; ["beta[$i]" for i in 1:K]; ["gamma[$i,$j]" for i in 1:K-1 for j in i+1:K]]
 
+nbe_coverage_df = map(1:n_sims) do i
+    θ_fixed = sample_nbe(1)
+    Z_fixed = simulate_nbe(θ_fixed, 1)
+    θ_hat = vec(NeuralEstimators.estimate(estimator, Z_fixed))
+    return DataFrame(
+        par = par_names,
+        estimate = θ_hat,
+        error = θ_hat - vec(θ_fixed),
+        relative_error = (θ_hat - vec(θ_fixed)) ./ abs.(vec(θ_fixed))
+    )
+end |> (x -> vcat(x...))
 
+intercept_df = filter(x -> x.par == "intercept", nbe_coverage_df)
+scatter(intercept_df.estimate, intercept_df.error, xlabel = "Estimate", ylabel = "Error", title = "NBE Intercept Estimates")
 
-bernard_data = Matrix(Float32[
-    54 463 907 695 316 57 15 19 3 0 0 56 19 1 3 69 10 31 8 6 1
-])'  # Convert to a matrix with one column
+beta_df = filter(x -> x.par == "beta[1]", nbe_coverage_df)
+scatter(beta_df.estimate, beta_df.error, xlabel = "Estimate", ylabel = "Error", title = "NBE Intercept Estimates")
 
-par_estimates = NeuralEstimators.estimate(estimator, log.(bernard_data .+ 1))
-
-
-exp(par_estimates[1])
