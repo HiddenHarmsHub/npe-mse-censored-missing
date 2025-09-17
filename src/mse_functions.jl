@@ -14,7 +14,7 @@ function generate_parameters(K::Int, intercept_dist, beta_dist, gamma_dist)
     )
     return(
         name = par_names,
-        value = par_values,
+        value = par_values
     )
 end
 
@@ -151,3 +151,75 @@ end
 
 
 
+function load_bernard_data(file_path::String, K::Int)
+    bernard_data = DataFrame(CSV.File(file_path))
+    bernard_data.group = string.(bernard_data.group)
+    bernard_dict = construct_data(bernard_data, K)
+    bernard_dict = Dict(k => v for (k, v) in bernard_dict if length(parse.(Int, collect(replace(k, r"[^\d]" => "")))) ≤ 2)
+    return bernard_dict
+end
+
+function construct_data(df::DataFrame, K::Int)
+    all_combinations = [collect(comb) for k in 1:K for comb in combinations(1:K, k)]
+    count_names = ["N_" * join(comb, ",") for comb in all_combinations]
+    counts = Vector{Int64}()
+    for combination in all_combinations
+        data_entry = df.count[df.group .== join(combination, "")]
+        push!(counts, isempty(data_entry) ? 0 : data_entry[1])
+    end
+
+    return Dict(zip(count_names, counts))
+end
+
+get_bernard_npe(bernard_dict, K) = vcat([bernard_dict["N_$i"] for i in 1:K], [bernard_dict["N_$(i),$(j)"] for i in 1:K-1 for j in i+1:K])
+
+
+
+function compare_npe_mcmc_posteriors(res_mcmc, res_npe, truth)
+    main_plot_list = []
+    p = density(res_mcmc[!, "intercept"], label="MCMC", title = "intercept")
+    density!(p, res_npe[1, :], label="NPE")
+    vline!([truth["intercept"]], color=:red, lw=3, label="Truth")
+    push!(main_plot_list, p)
+    for i in 1:K
+        p = density(res_mcmc[!, "betas[$i]"], label="MCMC", title = "beta $i")
+        density!(p, res_npe[i+1, :], label="NPE")
+        vline!([truth["beta_$i"]], color=:red, lw=3, label="truth")
+        push!(main_plot_list, p)
+    end
+
+    gamma_plot_list = []
+    for i in 1:binomial(K, 2)
+        p = density(res_mcmc[!, "gammas[$i]"], label="MCMC", title = "gamma $i")
+        density!(p, res_npe[i+1+K, :], label="NPE")
+        push!(gamma_plot_list, p)
+    end
+
+    return main_plot_list, gamma_plot_list
+end
+
+
+function plot_nbe_estimates(nbe_estimates, θ_truth=nothing; param_max = 0)
+    n_params = size(nbe_estimates, 1)
+    if param_max != 0
+        n_params = param_max
+    end
+    p = plot(layout = (n_params, n_params), size = (800, 800))
+    
+    for i in 1:n_params
+        for j in 1:n_params
+            if i == j
+                histogram!(p[i, j], nbe_estimates[i, :], bins = 30, label = "", legend = false)
+                if θ_truth !== nothing
+                    vline!(p[i, j], [θ_truth[i]], color = :red, lw = 2, label = "Truth")
+                end
+            elseif i < j
+                scatter!(p[i, j], nbe_estimates[j, :], nbe_estimates[i, :], ms=2, alpha=0.5, label = "", legend = false)
+                if θ_truth !== nothing
+                    scatter!(p[i, j], [θ_truth[j]], [θ_truth[i]], marker=(:x, 10, :red), label = "Truth", legend = false)
+                end
+            end
+        end
+    end
+    display(p)
+end
