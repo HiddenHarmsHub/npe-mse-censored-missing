@@ -1,3 +1,5 @@
+using CSV, DataFrames, Combinatorics
+
 function generate_parameters(K::Int, intercept_dist, beta_dist, gamma_dist)
     intercept = rand(intercept_dist)
     betas = rand(beta_dist, K)
@@ -175,16 +177,16 @@ get_bernard_npe(bernard_dict, K) = vcat([bernard_dict["N_$i"] for i in 1:K], [be
 
 
 
-function compare_npe_mcmc_posteriors(res_mcmc, res_npe, truth)
+function compare_npe_mcmc_posteriors(res_mcmc, res_npe, truth; linelabel = "truth")
     main_plot_list = []
     p = density(res_mcmc[!, "intercept"], label="MCMC", title = "intercept")
     density!(p, res_npe[1, :], label="NPE")
-    vline!([truth["intercept"]], color=:red, lw=3, label="Truth")
+    vline!([truth["intercept"]], color=:red, lw=3, label=linelabel)
     push!(main_plot_list, p)
     for i in 1:K
         p = density(res_mcmc[!, "betas[$i]"], label="MCMC", title = "beta $i")
         density!(p, res_npe[i+1, :], label="NPE")
-        vline!([truth["beta_$i"]], color=:red, lw=3, label="truth")
+        vline!([truth["beta_$i"]], color=:red, lw=3, label=linelabel)
         push!(main_plot_list, p)
     end
 
