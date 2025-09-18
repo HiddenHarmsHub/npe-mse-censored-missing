@@ -36,7 +36,7 @@ intercept_dists = [Uniform(1, 10)]
 beta_dists = [Normal(0, 4)]
 gamma_dists = [Normal(0, 1/5)]
 
-ms = [10, 50, 100, 500]
+ms = [1, 10, 50, 100, 500]
 Ks = [3, 4, 5, 6]
 
 # Create all combinations of Ks and ms
