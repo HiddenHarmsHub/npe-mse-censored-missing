@@ -3,7 +3,7 @@ using Distributions, Random, Optim, DataFrames, Plots, CSV, Combinatorics, Turin
 
 include("mse_functions.jl")
 
-function train_model(K, m, intercept_dist, beta_dist, gamma_dist, i, models_path)
+function train_model(K, m, n_param_validation, intercept_dist, beta_dist, gamma_dist, i, models_path)
     ## Neural estimation wrappers
     sample_nbe(n_reps) = hcat([generate_parameters_nbe(K, intercept_dist, beta_dist, gamma_dist) for _ in 1:n_reps]...)
     simulate_nbe(θ, m) = [generate_data_nbe(params, m) for params in eachcol(θ)]
@@ -27,7 +27,8 @@ function train_model(K, m, intercept_dist, beta_dist, gamma_dist, i, models_path
         estimator, 
         sample_nbe, 
         simulate_nbe, 
-        m = m
+        m = m,
+        K = n_param_validation
     )
     BSON.@save joinpath(models_path, "nbe_model_$i.bson") estimator
 end
@@ -54,7 +55,8 @@ append_model_list(model_list_file, model_list)
 Folds.map(
     model -> train_model(
         model.K, 
-        model.m, 
+        model.m,
+        model.n_params_validation, 
         model.intercept_dist, 
         model.beta_dist, 
         model.gamma_dist, 
