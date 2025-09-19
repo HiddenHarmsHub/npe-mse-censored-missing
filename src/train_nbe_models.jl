@@ -38,10 +38,11 @@ gamma_dists = [Normal(0, 1/5)]
 
 ms = [1, 10, 50, 100, 500]
 Ks = [3, 4, 5, 6]
+n_params_validation = [10_000, 100_000, 1_000_000, 10_000_000]
 
 # Create all combinations of Ks and ms
-grid = collect(Base.product(Ks, ms, intercept_dists, beta_dists, gamma_dists))[:]
-model_list = DataFrame(grid, [:K, :m, :intercept_dist, :beta_dist, :gamma_dist])
+grid = collect(Base.product(Ks, ms, n_params_validation, intercept_dists, beta_dists, gamma_dists))[:]
+model_list = DataFrame(grid, [:K, :m, :n_params_validation, :intercept_dist, :beta_dist, :gamma_dist])
 
 output_path = joinpath("output")
 models_path = joinpath(output_path, "models")
