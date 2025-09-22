@@ -1,4 +1,4 @@
-using CSV, DataFrames, Combinatorics
+using CSV, DataFrames, Combinatorics, BSON
 
 function generate_parameters(K::Int, intercept_dist, beta_dist, gamma_dist)
     intercept = rand(intercept_dist)
@@ -224,4 +224,46 @@ function plot_nbe_estimates(nbe_estimates, θ_truth=nothing; param_max = 0)
         end
     end
     display(p)
+end
+
+function append_model_list(model_list_file, new_model_list)
+    if isfile(model_list_file)
+        BSON.@load joinpath(output_path, "model_list.bson") model_list
+        new_model_list.i = nrow(model_list) .+ (1:nrow(new_model_list))
+        model_list = vcat(model_list, new_model_list)
+        BSON.@save joinpath(output_path, "model_list.bson") model_list
+    else
+        model_list = new_model_list
+        model_list.i = 1:nrow(model_list)
+        BSON.@save joinpath(output_path, "model_list.bson") model_list
+    end
+end
+
+
+function censorandaugment(Z; c, v = -1.0)
+    W = 1 * (Z .<= c)
+    U = ifelse.(Z .<= c, v, Z)
+    return vcat(U, W)
+end
+
+function simulatecensored_nbe(θ, m; kwargs...)
+    Z = simulate_nbe(θ, m)
+    UW = Folds.map(Z) do Zₖ
+		mapslices(Z -> censorandaugment(Z; kwargs...), Zₖ, dims = 1)
+	end
+    return UW
+end
+
+function likelihood_censored(counts::Vector{Int64}, pars::Vector, X::Matrix{Int64}, censoring_threshold::Int)
+    rates = exp.(X * pars)
+    ll = 0.0
+    for (rate, count) in zip(rates, counts)
+        if count == -1
+            # P(0 <= X <= censoring_threshold) 
+            ll += sum(pdf(Poisson(rate), 1:censoring_threshold))
+        else
+            ll += count .* log.(rate) .- rate
+        end
+    end
+    return ll
 end
