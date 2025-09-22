@@ -51,8 +51,8 @@ estimator = train(estimator, sample_nbe, simulator_censored, m = m)
 ## Now evaluate methods on test data
 X = one_hot_encode(K)
 
-n_reps = 4
-n_iter = 200
+n_reps = 500
+n_iter = 3000
 res = Folds.map(1:n_reps) do i
     θ = sample_nbe(1)
     Z_censored = simulatecensored_nbe(θ, 1, c = log(censor_threshold))
