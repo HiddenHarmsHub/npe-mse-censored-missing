@@ -68,8 +68,8 @@ test_df = DataFrame(
     beta3_mcmc = Float64[]
 )
 
-n_reps = 1000
-for i in 1:n_reps
+n_reps = 4
+Folds.map(1:n_reps) do i
     θ = sample_nbe(1)
     Z_censored = simulatecensored_nbe(θ, 1, c = log(censor_threshold))
     Z_censored_int = Int.(round.(map(x -> x > 0 ? exp(x) : x, Z_censored[1][1:n_data])))
@@ -90,12 +90,16 @@ for i in 1:n_reps
 
     res_mcmc = DataFrame(chains)
 
-    push!(test_df, (
+    DataFrame(
         θ[1], θ[2], θ[3], θ[4],
         NBE_estimate[1], NBE_estimate[2], NBE_estimate[3], NBE_estimate[4],
         MLE[1], MLE[2], MLE[3], MLE[4],
         median(res_mcmc[!, :intercept]), median(res_mcmc[!, "betas[1]"]), median(res_mcmc[!, "betas[2]"]), median(res_mcmc[!, "betas[3]"])
-    ))
+    )
 end
 
-CSV.write(joinpath("output", "censoring_comparison_K$(K).csv"), test_df)
+CSV.write(joinpath("output", "censoring_comparison_K$(K)_c$(censor_threshold).csv"), test_df)
+
+
+
+
