@@ -4,6 +4,8 @@ using BSON: @save, @load
 
 include("mse_functions.jl")
 
+println("Functions loaded, starting comparison")
+
 K = 5
 intercept_dist = Uniform(1, 10)
 beta_dist = Normal(0, 4)
