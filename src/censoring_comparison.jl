@@ -4,7 +4,7 @@ using BSON: @save, @load
 
 include("mse_functions.jl")
 
-K = 3
+K = 5
 intercept_dist = Uniform(1, 10)
 beta_dist = Normal(0, 4)
 gamma_dist = Normal(0, 1/5)
@@ -49,40 +49,22 @@ estimator = train(estimator, sample_nbe, simulator_censored, m = m)
 ## Now evaluate methods on test data
 X = one_hot_encode(K)
 
-test_df = DataFrame(
-    intercept_true = Float64[],
-    beta1_true = Float64[],
-    beta2_true = Float64[],
-    beta3_true = Float64[],
-    intercept_nbe = Float64[],
-    beta1_nbe = Float64[],
-    beta2_nbe = Float64[],
-    beta3_nbe = Float64[],
-    intercept_mle = Float64[],
-    beta1_mle = Float64[],
-    beta2_mle = Float64[],
-    beta3_mle = Float64[],
-    intercept_mcmc = Float64[],
-    beta1_mcmc = Float64[],
-    beta2_mcmc = Float64[],
-    beta3_mcmc = Float64[]
-)
-
 n_reps = 4
-Folds.map(1:n_reps) do i
+n_iter = 200
+res = Folds.map(1:n_reps) do i
     θ = sample_nbe(1)
     Z_censored = simulatecensored_nbe(θ, 1, c = log(censor_threshold))
     Z_censored_int = Int.(round.(map(x -> x > 0 ? exp(x) : x, Z_censored[1][1:n_data])))
     NBE_estimate = vec(NeuralEstimators.estimate(estimator, Z_censored[1]))
     MLE = optimize(vars -> -1*likelihood_censored(Z_censored_int, vars, X, censor_threshold), fill(0.0, n_pars), LBFGS()).minimizer
 
-    m = mse_model_censored(Z_censored_int, X, intercept_dist, beta_dist, gamma_dist, censor_threshold)
+    m1 = mse_model_censored(Z_censored_int, X, intercept_dist, beta_dist, gamma_dist, censor_threshold)
     num_chains = 4
     chains = sample(
-        m, 
+        m1, 
         NUTS(), 
         MCMCThreads(), 
-        3000, 
+        n_iter, 
         num_chains, 
         progress = false,
         parallel = false
@@ -102,22 +84,14 @@ Folds.map(1:n_reps) do i
         intercept_MLE = MLE[1], 
         beta1_MLE = MLE[2], 
         beta2_MLE = MLE[3], 
-        beta3 = MLE = MLE[4],
+        beta3_MLE = MLE = MLE[4],
         intercept_MCMC = median(res_mcmc[!, :intercept]), 
         beta1_MCMC = median(res_mcmc[!, "betas[1]"]), 
         beta2_MCMC = median(res_mcmc[!, "betas[2]"]), 
         beta3_MCMC = median(res_mcmc[!, "betas[3]"])
     )
-end
+end 
 
-CSV.write(joinpath("output", "censoring_comparison_K$(K)_c$(censor_threshold).csv"), test_df)
-
-
+CSV.write(joinpath("output", "censoring_comparison_K$(K)_c$(censor_threshold).csv"), vcat(res...))
 
 
-y = [DataFrame((1, 2, 3)), DataFrame((4, 5, 3))]
-
-DataFrame(
-    y = 1,
-    x = 4
-)
