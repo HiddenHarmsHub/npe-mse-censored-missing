@@ -1,5 +1,5 @@
 using Pkg; Pkg.activate(".")
-using Distributions, Random, NeuralEstimators, Flux, StatsPlots, DataFrames, Optim, Folds, Turing
+using Distributions, Random, NeuralEstimators, Flux, StatsPlots, DataFrames, Optim, Folds, Turing, CSV
 using BSON: @save, @load
 
 include("mse_functions.jl")
@@ -36,7 +36,7 @@ estimator = PointEstimator(network)
 
 
 # Number of independent replicates in each data set
-m = 10
+m = 1
 
 # Train an estimator with censoring
 simulate_nbe(θ, m) = [generate_data_nbe(params, m) for params in eachcol(θ)]
@@ -68,7 +68,7 @@ test_df = DataFrame(
     beta3_mcmc = Float64[]
 )
 
-n_reps = 2
+n_reps = 1000
 for i in 1:n_reps
     θ = sample_nbe(1)
     Z_censored = simulatecensored_nbe(θ, 1, c = log(censor_threshold))
@@ -82,7 +82,7 @@ for i in 1:n_reps
         m, 
         NUTS(), 
         MCMCThreads(), 
-        1000, 
+        3000, 
         num_chains, 
         progress = false,
         parallel = false
@@ -98,4 +98,4 @@ for i in 1:n_reps
     ))
 end
 
-
+CSV.write(joinpath("output", "censoring_comparison_K$(K).csv"), test_df)
