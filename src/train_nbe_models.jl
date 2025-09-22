@@ -4,6 +4,11 @@ using Distributions, Random, Optim, DataFrames, Plots, CSV, Combinatorics, Turin
 include("mse_functions.jl")
 
 function train_model(K, m, n_param_validation, intercept_dist, beta_dist, gamma_dist, i, models_path)
+    model_save_path = joinpath(models_path, "nbe_model_$i.bson")
+    if isfile(model_save_path)
+        println("Model $i already exists, skipping training.")
+        return
+    end
     ## Neural estimation wrappers
     sample_nbe(n_reps) = hcat([generate_parameters_nbe(K, intercept_dist, beta_dist, gamma_dist) for _ in 1:n_reps]...)
     simulate_nbe(θ, m) = [generate_data_nbe(params, m) for params in eachcol(θ)]
