@@ -91,10 +91,22 @@ Folds.map(1:n_reps) do i
     res_mcmc = DataFrame(chains)
 
     DataFrame(
-        θ[1], θ[2], θ[3], θ[4],
-        NBE_estimate[1], NBE_estimate[2], NBE_estimate[3], NBE_estimate[4],
-        MLE[1], MLE[2], MLE[3], MLE[4],
-        median(res_mcmc[!, :intercept]), median(res_mcmc[!, "betas[1]"]), median(res_mcmc[!, "betas[2]"]), median(res_mcmc[!, "betas[3]"])
+        intercept_true = θ[1], 
+        beta1_true = θ[2], 
+        beta2_true = θ[3], 
+        beta3_true = θ[4],
+        intercept_NBE = NBE_estimate[1], 
+        beta1_NBE = NBE_estimate[2], 
+        beta2_NBE = NBE_estimate[3], 
+        beta3_NBE = NBE_estimate[4],
+        intercept_MLE = MLE[1], 
+        beta1_MLE = MLE[2], 
+        beta2_MLE = MLE[3], 
+        beta3 = MLE = MLE[4],
+        intercept_MCMC = median(res_mcmc[!, :intercept]), 
+        beta1_MCMC = median(res_mcmc[!, "betas[1]"]), 
+        beta2_MCMC = median(res_mcmc[!, "betas[2]"]), 
+        beta3_MCMC = median(res_mcmc[!, "betas[3]"])
     )
 end
 
@@ -103,3 +115,9 @@ CSV.write(joinpath("output", "censoring_comparison_K$(K)_c$(censor_threshold).cs
 
 
 
+y = [DataFrame((1, 2, 3)), DataFrame((4, 5, 3))]
+
+DataFrame(
+    y = 1,
+    x = 4
+)
