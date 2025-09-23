@@ -43,9 +43,6 @@ architecture_list = DataFrame(
 
 architecture_list.i = 1:nrow(architecture_list)
 
-architecture_list = architecture_list[1:2, :]
-
-
 output_path = joinpath("output")
 architectures_path = joinpath(output_path, "architectures")
 mkpath(architectures_path)
