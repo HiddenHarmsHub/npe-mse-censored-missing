@@ -1,19 +1,13 @@
 using Pkg; Pkg.activate(".")
-using Distributions, Random, NeuralEstimators, Flux, StatsPlots, DataFrames, Optim, Folds
+using Distributed, SlurmClusterManager
+addprocs(SlurmManager(); exeflags=["--threads", "1", "--project"])
+
+@everywhere using Distributions, Random, NeuralEstimators, Flux, StatsPlots, DataFrames, Optim, BSON
 
 
-include("mse_functions.jl")
 
-K = 4
-intercept_dist = Uniform(1, 10)
-beta_dist = Normal(0, 4)
-gamma_dist = Normal(0, 1/5)
+@everywhere include("mse_functions.jl")
 
-sample_nbe(n_reps) = hcat([generate_parameters_nbe(K, intercept_dist, beta_dist, gamma_dist) for _ in 1:n_reps]...)
-simulate_nbe(θ, m) = [generate_data_nbe(params, m) for params in eachcol(θ)]
-
-n_data = K + binomial(K, 2)
-n_pars = 1 + n_data
 
 n_inner_hidden_layers = collect(1:3)
 w_encoder_values = [8, 16, 32, 64, 128, 256]
@@ -42,6 +36,8 @@ architecture_list = DataFrame(
 )
 
 architecture_list.i = 1:nrow(architecture_list)
+architecture_list.K .= 4
+architecture_list = architecture_list[1:8,:]
 
 output_path = joinpath("output")
 architectures_path = joinpath(output_path, "architectures")
@@ -49,7 +45,18 @@ mkpath(architectures_path)
 
 BSON.@save joinpath(output_path, "architecture_list.bson") architecture_list
 
-function train_model(i, n_inner_hidden_layers, w_encoder, n_outer_hidden_layers, hidden_layer_width, m)
+@everywhere function train_model(i, K, n_inner_hidden_layers, w_encoder, n_outer_hidden_layers, hidden_layer_width, m, savepath)
+    intercept_dist = Uniform(1, 10)
+    beta_dist = Normal(0, 4)
+    gamma_dist = Normal(0, 1/5)
+
+
+    n_data = K + binomial(K, 2)
+    n_pars = 1 + n_data
+
+    sample_nbe(n_reps) = hcat([generate_parameters_nbe(K, intercept_dist, beta_dist, gamma_dist) for _ in 1:n_reps]...)
+    simulate_nbe(θ, m) = [generate_data_nbe(params, m) for params in eachcol(θ)]
+
     # Inner and outer networks
     ψ = Chain(
         Dense(n_data, hidden_layer_width, relu),
@@ -74,17 +81,19 @@ function train_model(i, n_inner_hidden_layers, w_encoder, n_outer_hidden_layers,
         m = m
     )
 
-    BSON.@save joinpath(architectures_path, "architecture_$i.bson") estimator
+    BSON.@save joinpath(savepath, "architecture_$i.bson") estimator
 end
 
-Folds.map(
+pmap(
     model -> train_model(
         model.i,
+        model.K,
         model.n_inner_hidden_layers, 
         model.w_encoder, 
         model.n_outer_hidden_layers, 
         model.hidden_layer_width,
-        model.m
+        model.m,
+        architectures_path
     ),
     eachrow(architecture_list)
 )
