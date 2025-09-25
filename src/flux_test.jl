@@ -1,3 +1,4 @@
+using Pkg; Pkg.activate("tmp")
 using Flux
 using Distributions # For defining priors and likelihoods
 using ProgressMeter # To show a nice progress bar
@@ -121,9 +122,8 @@ estimator_nn = Chain(
     Dense(256, 256, relu),
     Dense(256, 128, relu),
     Dense(128, output_dim) # Output all NBE parameters
-)
+) |> device # Move model to GPU if available
 
-estimator_nn = estimator_nn |> device  # Move model to GPU if available
 
 # MAE loss function
 loss(model, x, y) = Flux.mae(model(x), y)
