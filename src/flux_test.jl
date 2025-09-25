@@ -7,7 +7,8 @@ using CUDA
 
 CUDA.allowscalar(false)  # recommended
 
-device = gpu_device()
+#device = gpu_device()
+device = cpu_device() 
 
 function generate_parameters_nbe(K::Int, intercept_dist, beta_dist, gamma_dist)
     intercept = rand(intercept_dist)
@@ -102,7 +103,7 @@ function prepare_data_for_training(data_2d, params_2d)
 end
 
 # --- Simulation settings ---
-n_simulations_per_epoch = 10_000_000  # Number of different parameter sets per epoch
+n_simulations_per_epoch = 1_000_000  # Number of different parameter sets per epoch
 n_replicates_per_param = 1     # Number of data replicates per parameter set
 
 # Get dimensions from sample data
@@ -122,16 +123,19 @@ estimator_nn = Chain(
     Dense(128, output_dim) # Output all NBE parameters
 )
 
+estimator_nn = estimator_nn |> device  # Move model to GPU if available
+
 # MAE loss function
 loss(model, x, y) = Flux.mae(model(x), y)
 opt = Flux.setup(Adam(), estimator_nn)
 
 batch_size = 64  # Reduced due to higher dimensionality
 
+
 # --- The Training Loop with Fresh Data Each Epoch ---
 println("Starting training with fresh data each epoch...")
 epochs = 2
-
+overall_start_time = time()
 for epoch in 1:epochs
     epoch_start_time = time()
     
@@ -140,7 +144,7 @@ for epoch in 1:epochs
     epoch_data, epoch_params = generate_batch(n_simulations_per_epoch, n_replicates_per_param)
     
     # Prepare data for training (already in correct format)
-    epoch_data, epoch_params = prepare_data_for_training(epoch_data, epoch_params)
+    epoch_data, epoch_params = prepare_data_for_training(epoch_data, epoch_params) |> device  # Move data to GPU if available
     
     # Create data loader for this epoch
     train_loader = DataLoader((epoch_data, epoch_params), batchsize=batch_size, shuffle=true)
@@ -154,7 +158,8 @@ for epoch in 1:epochs
     epoch_time = time() - epoch_start_time
     @printf("Epoch %d: Training MAE = %.4f, Time = %.2f seconds\n", epoch, current_loss, epoch_time)
 end
-
+overall_final_time = time() - overall_start_time
+@printf("Overall training time for %d epochs: %.2f seconds\n", epochs, overall_final_time)
 
 # --- Test the estimator ---
 
