@@ -8,7 +8,6 @@ using Printf
 μ_prior = Normal(0, 5)
 σ_prior = Gamma(2, 2)
 
-
 function generate_simulation(n_samples_per_sim::Int)
     # 1. Simulate parameters from the prior
     μ = rand(μ_prior)
@@ -22,22 +21,23 @@ function generate_simulation(n_samples_per_sim::Int)
     return (Float32.(data), Float32.([μ, σ]))
 end
 
-# --- Simulation settings ---
-n_simulations = 50_000 # How many (data, params) pairs to generate
-n_samples = 50       # How many data points in each simulated dataset 'x'
-
-# Pre-allocate arrays for performance
-all_data = zeros(Float32, n_samples, n_simulations)
-all_params = zeros(Float32, 2, n_simulations)
-
-# Run the simulation loop
-println("Generating $n_simulations simulations...")
-@showprogress for i in 1:n_simulations
-    data, params = generate_simulation(n_samples)
-    all_data[:, i] = data
-    all_params[:, i] = params
+# Function to generate a batch of simulations
+function generate_batch(n_simulations::Int, n_samples::Int)
+    all_data = zeros(Float32, n_samples, n_simulations)
+    all_params = zeros(Float32, 2, n_simulations)
+    
+    for i in 1:n_simulations
+        data, params = generate_simulation(n_samples)
+        all_data[:, i] = data
+        all_params[:, i] = params
+    end
+    
+    return all_data, all_params
 end
 
+# --- Simulation settings ---
+n_simulations_per_epoch = 10000 # Smaller batches per epoch
+n_samples = 50       # How many data points in each simulated dataset 'x'
 
 # The network takes a dataset of size `n_samples` and outputs 2 parameter estimates
 estimator_nn = Chain(
@@ -46,29 +46,31 @@ estimator_nn = Chain(
     Dense(128, 2) # Output layer with 2 neurons for μ and σ
 )
 
-
-
 # MAE loss function
 loss(model, x, y) = Flux.mae(model(x), y)
 opt = Flux.setup(Adam(), estimator_nn)
 
 batch_size = 128
-train_loader = DataLoader((all_data, all_params), batchsize=batch_size, shuffle=true)
 
-# --- The Training Loop ---
-println("Starting training...")
-epochs = 100
-losses = Float32[]
+# --- The Training Loop with Fresh Data Each Epoch ---
+println("Starting training with fresh data each epoch...")
+epochs = 1000
+
 for epoch in 1:epochs
-    # Train for one full pass over the data
+    # Generate fresh training data for this epoch
+    println("Generating fresh data for epoch $epoch...")
+    epoch_data, epoch_params = generate_batch(n_simulations_per_epoch, n_samples)
+    
+    # Create data loader for this epoch
+    train_loader = DataLoader((epoch_data, epoch_params), batchsize=batch_size, shuffle=true)
+    
+    # Train for one full pass over this epoch's data
     Flux.train!(loss, estimator_nn, train_loader, opt)
 
-    # Calculate and report the loss on the whole training set
-    current_loss = loss(estimator_nn, all_data, all_params)
-    push!(losses, current_loss)
+    # Calculate and report the loss on this epoch's training set
+    current_loss = loss(estimator_nn, epoch_data, epoch_params)
     @printf("Epoch %d: Training MAE = %.4f\n", epoch, current_loss)
 end
-
 
 println("Training complete! 🎉")
 
