@@ -1,5 +1,4 @@
-using Distributions, NeuralEstimators, Flux
-using BSON: @save, @load
+using Distributions, NeuralEstimators, Flux, BSON
 
 function sample_parameters(
     K::Int; 
@@ -58,7 +57,7 @@ function train_model_mlp(n_lists, width, n_hidden, train_size; m = 1, censoring_
     mdl_str = "model_$(n_lists)_$(width)_$(n_hidden)_$(censoring_threshold)_$(train_size).bson"
     if !overwrite && savepath !== nothing && isfile(joinpath(savepath, mdl_str))
         println("Model already exists at $(joinpath(savepath, mdl_str)). Loading existing model.")
-        @load joinpath(savepath, mdl_str) estimator
+        BSON.@load joinpath(savepath, mdl_str) estimator
         return estimator
     end
 
