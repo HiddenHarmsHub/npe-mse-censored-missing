@@ -22,6 +22,7 @@ grid = collect(Base.product(
 
 
 output_path = joinpath("output", "models")
+mkpath(output_path)
 
 pmap(
     model -> train_model_mlp(
