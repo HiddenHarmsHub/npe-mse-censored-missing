@@ -39,21 +39,31 @@ function simulate_data(params, m; censoring_threshold = 0)
     return Float32.(log.(Z .+ 1))  # Log-transform the counts
 end
 
-function construct_MLP(width, n_hidden, K::Int, censoring::Bool = false)
-    n_data = K + binomial(K, 2)
+function construct_MLP(width::Int, n_hidden::Int, n_lists::Int, censoring::Bool = false, intercept_support = nothing)
+    n_data = n_lists + binomial(n_lists, 2)
     if censoring
         n_data *= 2  # Double the input size for censored data (U and W)
     end
-    n_pars = 1 + K + binomial(K, 2)  # intercept + betas + gammas
+    n_pars = 1 + n_data  # intercept + betas + gammas
+
+    if isnothing(intercept_support)
+        final_layer = Parallel(
+            vcat,
+            Dense(width, 1, x -> intercept_support[1] .+ intercept_support[2] .* sigmoid.(x)),  # Compress to the support of the uniform prior
+            Dense(width, n_pars - 1, identity)  # Identity for betas and gammas
+        )
+    else
+        final_layer = Dense(width, n_pars)
+    end
 
     return Chain(
         Dense(n_data, width, relu),
         [Dense(width, width, relu) for _ in 1:n_hidden]...,
-        Dense(width, n_pars)
+        final_layer
     )
 end
 
-function train_model_mlp(n_lists, width, n_hidden, train_size; m = 1, censoring_threshold = 0, savepath = nothing, overwrite = true)
+function train_model_mlp(n_lists, width, n_hidden, train_size; m = 1, censoring_threshold = 0, savepath = nothing, overwrite = true, intercept_dist = Uniform(1, 10))
     mdl_str = "model_$(n_lists)_$(width)_$(n_hidden)_$(censoring_threshold)_$(train_size).bson"
     if !overwrite && savepath !== nothing && isfile(joinpath(savepath, mdl_str))
         println("Model already exists at $(joinpath(savepath, mdl_str)). Loading existing model.")
@@ -61,9 +71,11 @@ function train_model_mlp(n_lists, width, n_hidden, train_size; m = 1, censoring_
         return estimator
     end
 
-    sample_nbe(n_reps) = hcat([sample_parameters(n_lists) for _ in 1:n_reps]...)
+    intercept_support = ifelse(typeof(intercept_dist) <: Uniform, params(intercept_dist), nothing)
+
+    sample_nbe(n_reps) = hcat([sample_parameters(n_lists, intercept_dist = intercept_dist) for _ in 1:n_reps]...)
     simulate_nbe(θ, m) = hcat([simulate_data(params, m, censoring_threshold = censoring_threshold) for params in eachcol(θ)]...)
-    network = construct_MLP(width, n_hidden, n_lists, censoring_threshold > 0)
+    network = construct_MLP(width, n_hidden, n_lists, censoring_threshold > 0, intercept_support)
     estimator = PointEstimator(network)
 
     estimator = train(
@@ -80,4 +92,3 @@ function train_model_mlp(n_lists, width, n_hidden, train_size; m = 1, censoring_
 
     return estimator
 end
-
