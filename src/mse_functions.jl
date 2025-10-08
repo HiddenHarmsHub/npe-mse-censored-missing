@@ -1,4 +1,5 @@
 using Distributions, NeuralEstimators, Flux
+using BSON: @save, @load
 
 function sample_parameters(
     K::Int; 
@@ -6,15 +7,14 @@ function sample_parameters(
     beta_dist = Normal(0, 4), 
     gamma_dist = Normal(0, 1/5)
 )
-    return vcat(
+    return Float32.(vcat(
         rand(intercept_dist),
         rand(beta_dist, K),
         rand(gamma_dist, binomial(K, 2))
-    )
+    ))
 end
 
-
-function simulate_data(params, m; censoring_threshold = nothing)
+function simulate_data(params, m; censoring_threshold = 0)
     K = Int(-0.5 + (sqrt(8 * length(params) - 7) / 2))  # Solve for K given length of params
     intercept = params[1]
     betas = params[2:1+K]
@@ -31,7 +31,7 @@ function simulate_data(params, m; censoring_threshold = nothing)
         Z[:, i] = vcat(main_counts, pair_counts)
     end
 
-    if !isnothing(censoring_threshold)
+    if censoring_threshold > 0
         W = 1 * (Z .<= censoring_threshold)
         U = ifelse.(Z .<= censoring_threshold, -1.0, log.(Z .+ 1))
         return Float32.(vcat(U, W))
@@ -39,8 +39,6 @@ function simulate_data(params, m; censoring_threshold = nothing)
 
     return Float32.(log.(Z .+ 1))  # Log-transform the counts
 end
-
-
 
 function construct_MLP(width, n_hidden, K::Int, censoring::Bool = false)
     n_data = K + binomial(K, 2)
@@ -56,10 +54,17 @@ function construct_MLP(width, n_hidden, K::Int, censoring::Bool = false)
     )
 end
 
-function train_model_mlp(n_lists, width, n_hidden, train_size; m = 1, censoring_threshold = nothing)
+function train_model_mlp(n_lists, width, n_hidden, train_size; m = 1, censoring_threshold = 0, savepath = nothing, overwrite = true)
+    mdl_str = "model_$(n_lists)_$(width)_$(n_hidden)_$(censoring_threshold)_$(train_size).bson"
+    if !overwrite && savepath !== nothing && isfile(joinpath(savepath, mdl_str))
+        println("Model already exists at $(joinpath(savepath, mdl_str)). Loading existing model.")
+        @load joinpath(savepath, mdl_str) estimator
+        return estimator
+    end
+
     sample_nbe(n_reps) = hcat([sample_parameters(n_lists) for _ in 1:n_reps]...)
     simulate_nbe(θ, m) = hcat([simulate_data(params, m, censoring_threshold = censoring_threshold) for params in eachcol(θ)]...)
-    network = construct_MLP(width, n_hidden, n_lists, false)
+    network = construct_MLP(width, n_hidden, n_lists, censoring_threshold > 0)
     estimator = PointEstimator(network)
 
     estimator = train(
@@ -69,14 +74,11 @@ function train_model_mlp(n_lists, width, n_hidden, train_size; m = 1, censoring_
         K = train_size,
         m = m
     )
+
+    if !isnothing(savepath) 
+        BSON.@save joinpath(savepath, mdl_str) estimator
+    end
+
     return estimator
 end
 
-#estimator = train_model_mlp(4, 128, 2, 10_000)
-
-n_lists = 4
-width = 128
-n_hidden = 1
-train_size = 10_000
-
-estimator = train_model_mlp(n_lists, width, n_hidden, train_size)
