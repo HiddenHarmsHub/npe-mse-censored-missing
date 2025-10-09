@@ -6,10 +6,10 @@ addprocs(SlurmManager(); exeflags=["--threads", "1", "--project"])
 
 
 widths = [8, 16, 32, 64, 128, 256]
-n_hidden = [1, 2, 3, 4, 5]
-censoring_thresholds = [0, 2, 4, 8, 16, 32, 64, 128, 256]
+n_hidden = [1, 2, 3, 4]
+censoring_thresholds = [0, 2, 4, 8, 10, 16, 32, 64, 128]
 list_sizes = [3, 4, 5, 6, 10, 15]
-train_sizes = [10000, 100000, 1000000]
+train_sizes = [100000]
 
 
 grid = collect(Base.product(
