@@ -139,8 +139,14 @@ function load_model(;
 end
 
 
-function load_test_data(test_path, list_size)
+function load_test_data(test_path, list_size, censoring_threshold = 0)
     test_data = BSON.load(joinpath(test_path, "test_data_$list_size.bson"))
+    if censoring_threshold > 0
+        Z_test = test_data[:Z_test]
+        W = 1 * (Z_test .<= log(censoring_threshold + 1))
+        U = ifelse.(Z_test .<= log(censoring_threshold + 1), -1.0, Z_test)
+        return Float32.(vcat(U, W)), test_data[:params]
+    end
     return test_data[:Z_test], test_data[:params]
 end
 
