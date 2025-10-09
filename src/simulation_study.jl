@@ -90,7 +90,7 @@ scatter(
 ## now look at sensitivity to neurons
 #map(x -> train_model_mlp(5, x, 3, 10_000, censoring_threshold = 10, savepath = models_path), [8, 16, 32, 64, 128, 256])
 
-outputs = []
+width_outputs = []
 for width in [8, 16, 32, 64, 128, 256]
     model = load_model(
         n_lists = 5, 
@@ -104,12 +104,39 @@ for width in [8, 16, 32, 64, 128, 256]
     test_data, test_pars = load_test_data(test_path, 5, 10)
     estimated_pars  = model(test_data)
     APE = abs.((estimated_pars .- test_pars) ./ test_pars)
-    push!(outputs, DataFrame(
+    push!(width_outputs, DataFrame(
         width = width,
         APE = APE[1, :]
     ))
 end
 
 
-vcat(outputs...) |> df -> CSV.write(joinpath("output", "width_sensitivity.csv"), df)
+vcat(width_outputs...) |> df -> CSV.write(joinpath("output", "width_sensitivity.csv"), df)
+
+
+## now look at sensitivity to the censoring level
+
+#map(x -> train_model_mlp(5, 128, 3, 10_000, censoring_threshold = x, savepath = models_path), [0, 2, 4, 8, 16, 32, 64, 128])
+
+censoring_outputs = []
+for censoring_threshold in [0, 2, 4, 8, 16, 32, 64, 128]
+    model = load_model(
+        n_lists = 5, 
+        width = 128,
+        n_hidden = 3, 
+        censoring_threshold = censoring_threshold,
+        train_size = 10_000, 
+        models_path = models_path
+    )
+    
+    test_data, test_pars = load_test_data(test_path, 5, censoring_threshold)
+    estimated_pars  = model(test_data)
+    APE = abs.((estimated_pars .- test_pars) ./ test_pars)
+    push!(censoring_outputs, DataFrame(
+        censoring_threshold = censoring_threshold,
+        APE = APE[1, :]
+    ))
+end
+
+vcat(censoring_outputs...) |> df -> CSV.write(joinpath("output", "censoring_sensitivity.csv"), df)
 
