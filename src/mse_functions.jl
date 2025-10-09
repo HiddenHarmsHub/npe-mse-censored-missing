@@ -61,7 +61,30 @@ function construct_MLP(width::Int, n_hidden::Int, n_lists::Int, censoring::Bool 
     end
     n_pars = 1 + n_data  # intercept + betas + gammas
 
-    if isnothing(intercept_support)
+    if !isnothing(intercept_support)
+        final_layer = Parallel(
+            vcat,
+            Dense(width, 1, x -> intercept_support[1] .+ intercept_support[2] .* sigmoid.(x)),  # Compress to the support of the uniform prior
+            Dense(width, n_pars - 1, identity)  # Identity for betas and gammas
+        )
+    else
+        final_layer = Dense(width, n_pars)
+    end
+
+    return Chain(
+        Dense(n_data, width, relu),
+        [Dense(width, width, relu) for _ in 1:n_hidden]...,
+        final_layer
+    )
+end
+
+function construct_MLP_c(width::Int, n_hidden::Int, n_lists::Int, intercept_support = nothing)
+    n_data = n_lists + binomial(n_lists, 2)
+    n_input = n_data * 2 + 1
+
+    n_pars = 1 + n_data  # intercept + betas + gammas
+
+    if !isnothing(intercept_support)
         final_layer = Parallel(
             vcat,
             Dense(width, 1, x -> intercept_support[1] .+ intercept_support[2] .* sigmoid.(x)),  # Compress to the support of the uniform prior
