@@ -95,7 +95,7 @@ function construct_MLP_c(width::Int, n_hidden::Int, n_lists::Int, intercept_supp
     end
 
     return Chain(
-        Dense(n_data, width, relu),
+        Dense(n_input, width, relu),
         [Dense(width, width, relu) for _ in 1:n_hidden]...,
         final_layer
     )
