@@ -56,10 +56,10 @@ end
 
 function construct_MLP(width::Int, n_hidden::Int, n_lists::Int, censoring::Bool = false, intercept_support = nothing)
     n_data = n_lists + binomial(n_lists, 2)
+    n_pars = 1 + n_data  # intercept + betas + gammas
     if censoring
         n_data *= 2  # Double the input size for censored data (U and W)
     end
-    n_pars = 1 + n_data  # intercept + betas + gammas
 
     if !isnothing(intercept_support)
         final_layer = Parallel(
