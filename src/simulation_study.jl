@@ -27,58 +27,89 @@ end
 
 
 
-function compute_assessment(models_path)
+function test_summary(models_path)
+    model_files = readdir(models_path)
 
+    output = []
+    for model_file in model_files
+        n_lists, width, n_hidden, censoring_threshold, train_size = parse.(Int, [m.match for m in eachmatch(r"\d+", model_file)])
+        censoring_threshold > 0 && continue
+        model = load_model(model_file, models_path)
+        test_data, test_pars = load_test_data(test_path, n_lists, censoring_threshold)
+        estimated_pars  = model(test_data)
+        push!(output, DataFrame(
+            n_lists=n_lists, 
+            width=width, 
+            n_hidden=n_hidden, 
+            train_size=train_size, 
+            censoring_threshold=censoring_threshold,
+            parameter = get_param_names(n_lists),
+            bias = vec(mean(estimated_pars .- test_pars, dims=2)), 
+            mse = vec(mean((estimated_pars .- test_pars).^2, dims=2)), 
+            mae = vec(mean(abs.(estimated_pars .- test_pars), dims=2)), 
+            rmse = vec(sqrt.(mean((estimated_pars .- test_pars).^2, dims=2))), 
+            mape = vec(mean(abs.((estimated_pars .- test_pars) ./ test_pars), dims=2))
+        ))
+    end
+
+    return vcat(output...)
 end
 
-model_files = readdir(models_path)
 
-output = []
-for model_file in model_files[1:5]
-    numbers = parse.(Int, [m.match for m in eachmatch(r"\d+", model_file)])
-    n_lists, width, n_hidden, censoring_threshold, train_size = parse.(Int, [m.match for m in eachmatch(r"\d+", model_file)])
-    censoring_threshold > 0 && continue
-    model = load_model(model_file, models_path)
-    test_data, test_pars = load_test_data(test_path, n_lists)
-    estimated_pars  = model(test_data)
-    push!(output, DataFrame(
-        n_lists=n_lists, 
-        width=width, 
-        n_hidden=n_hidden, 
-        train_size=train_size, 
-        censoring_threshold=censoring_threshold,
-        parameter = get_param_names(n_lists),
-        bias = vec(mean(estimated_pars .- test_pars, dims=2)), 
-        mse = vec(mean((estimated_pars .- test_pars).^2, dims=2)), 
-        mae = vec(mean(abs.(estimated_pars .- test_pars), dims=2)), 
-        rmse = vec(sqrt.(mean((estimated_pars .- test_pars).^2, dims=2))), 
-        mape = vec(mean(abs.((estimated_pars .- test_pars) ./ test_pars), dims=2))
-    ))
-end
+test_summary_df = test_summary(models_path)
+CSV.write(joinpath("output", "test_summary.csv"), test_summary_df)
 
 
 
-output[1]
-
-
-
+train_model_mlp(5, 128, 3, 10_000, censoring_threshold = 10, savepath = models_path)
 
 nbe_model = load_model(
     n_lists = 5, 
     width = 128,
     n_hidden = 3, 
-    censoring_threshold = 0,
-    train_size = 100_000, 
+    censoring_threshold = 10,
+    train_size = 10_000, 
     models_path = models_path
 )
+    
+## now look at individual ability to recover intercept
 
-test_data, test_pars = load_test_data(test_path, 5)
-
+test_data, test_pars = load_test_data(test_path, 5, 10)
 estimated_pars  = nbe_model(test_data)
-
 APE = abs.((estimated_pars .- test_pars) ./ test_pars)
-
 scatter(test_pars[1, :], APE[1, :])
+scatter(
+    exp.(test_pars[1, :]), log.(APE[1, :]), 
+    xlabel="True intercept", 
+    ylabel="Log MAPE", 
+    title="NPE-MSE Intercept Estimates (K=3)", 
+    legend=false
+)
 
 
-scatter(exp.(test_pars[1, :]), log.(APE[1, :]), xlabel="True intercept", ylabel="Estimated intercept", title="NPE-MSE Intercept Estimates (K=3)", legend=false)
+## now look at sensitivity to neurons
+#map(x -> train_model_mlp(5, x, 3, 10_000, censoring_threshold = 10, savepath = models_path), [8, 16, 32, 64, 128, 256])
+
+outputs = []
+for width in [8, 16, 32, 64, 128, 256]
+    model = load_model(
+        n_lists = 5, 
+        width = width,
+        n_hidden = 3, 
+        censoring_threshold = 10,
+        train_size = 10_000, 
+        models_path = models_path
+    )
+    
+    test_data, test_pars = load_test_data(test_path, 5, 10)
+    estimated_pars  = model(test_data)
+    APE = abs.((estimated_pars .- test_pars) ./ test_pars)
+    push!(outputs, DataFrame(
+        width = width,
+        APE = APE[1, :]
+    ))
+end
+
+
+vcat(outputs...) |> df -> CSV.write(joinpath("output", "width_sensitivity.csv"), df)
+
