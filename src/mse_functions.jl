@@ -107,3 +107,13 @@ function train_model_mlp(n_lists, width, n_hidden, train_size; m = 1, censoring_
 
     return estimator
 end
+
+function load_model(n_lists, width, n_hidden, censoring_threshold, train_size)
+    mdl_str = "model_$(n_lists)_$(width)_$(n_hidden)_$(censoring_threshold)_$(train_size).bson"
+    if isfile(joinpath(models_path, mdl_str))
+        model = BSON.load(joinpath(models_path, mdl_str))
+        return model[:estimator]
+    else
+        error("Model file $(mdl_str) not found in $(models_path).")
+    end
+end
