@@ -108,7 +108,7 @@ function train_model_mlp(n_lists, width, n_hidden, train_size; m = 1, censoring_
     return estimator
 end
 
-function load_model(n_lists, width, n_hidden, censoring_threshold, train_size)
+function load_model(n_lists, width, n_hidden, censoring_threshold, train_size, models_path)
     mdl_str = "model_$(n_lists)_$(width)_$(n_hidden)_$(censoring_threshold)_$(train_size).bson"
     if isfile(joinpath(models_path, mdl_str))
         model = BSON.load(joinpath(models_path, mdl_str))
@@ -116,4 +116,38 @@ function load_model(n_lists, width, n_hidden, censoring_threshold, train_size)
     else
         error("Model file $(mdl_str) not found in $(models_path).")
     end
+end
+
+function load_model(mdl_str, models_path)
+    if isfile(joinpath(models_path, mdl_str))
+        model = BSON.load(joinpath(models_path, mdl_str))
+        return model[:estimator]
+    else
+        error("Model file $(mdl_str) not found in $(models_path).")
+    end
+end
+
+function load_model(; 
+    n_lists = n_lists, 
+    width = width, 
+    n_hidden = n_hidden, 
+    censoring_threshold = censoring_threshold, 
+    train_size = train_size, 
+    models_path = joinpath("output", "models")
+)
+    load_model(n_lists, width, n_hidden, censoring_threshold, train_size, models_path)
+end
+
+
+function load_test_data(test_path, list_size)
+    test_data = BSON.load(joinpath(test_path, "test_data_$list_size.bson"))
+    return test_data[:Z_test], test_data[:params]
+end
+
+function get_param_names(n_lists)
+    return vcat(
+        "intercept",
+        ["beta_$(i)" for i in 1:n_lists],
+        ["gamma_$(i),$(j)" for i in 1:(n_lists-1) for j in (i+1):n_lists]
+    )
 end
