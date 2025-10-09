@@ -25,15 +25,19 @@ output_path = joinpath("output", "models")
 mkpath(output_path)
 
 pmap(
-    model -> train_model_mlp(
-        model[1],
-        model[2],
-        model[3], 
-        model[4], 
-        censoring_threshold = model[5],
-        savepath = output_path,
-        overwrite = false
-    ),
+    model -> begin
+        wid = myid()
+        println("Worker $wid running with parameters: list_size=$(model[1]), width=$(model[2]), n_hidden=$(model[3]), train_size=$(model[4]), censoring_threshold=$(model[5])")
+        train_model_mlp(
+            model[1],
+            model[2],
+            model[3], 
+            model[4], 
+            censoring_threshold = model[5],
+            savepath = output_path,
+            overwrite = false
+        )
+    end,
     grid
 )
 
