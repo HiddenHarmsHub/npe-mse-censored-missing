@@ -6,11 +6,26 @@ function sample_parameters(
     beta_dist = Normal(0, 4), 
     gamma_dist = Normal(0, 1/5)
 )
-    return Float32.(vcat(
-        rand(intercept_dist),
-        rand(beta_dist, K),
-        rand(gamma_dist, binomial(K, 2))
-    ))
+    while true
+        intercept = rand(intercept_dist)
+        betas = rand(beta_dist, K)
+        gammas = rand(gamma_dist, binomial(K, 2))
+        valid = true
+        for i in 1:K-1
+            for j in i+1:K
+                if intercept + betas[i] + betas[j] >= 25
+                    valid = false
+                    break
+                end
+            end
+            if !valid
+                break
+            end
+        end
+        if valid
+            return Float32.(vcat(intercept, betas, gammas))
+        end
+    end
 end
 
 function simulate_data(params, m; censoring_threshold = 0)
