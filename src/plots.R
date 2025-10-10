@@ -61,3 +61,29 @@ ggsave(
     filename = file.path("output", "figures", "log_ape_vs_n_layers_new.png"), 
     plot = n_layers_plot, width = 7, height = 5, dpi = 300
 )
+
+
+
+## look at variable c
+var_c_df <- read_csv(file.path("output", "variable_vs_fixed_censoring.csv"))
+
+variable_fixed_comparison_plot <- var_c_df %>% 
+    pivot_longer(
+        cols = c("APE_var", "APE_fix"), 
+        names_to = "c_type", 
+        values_to = "APE"
+    ) %>% 
+    ggplot(aes(x = as.factor(censoring_threshold), y = log(APE), fill = c_type)) +
+    geom_boxplot(alpha = 0.6) +
+    theme_minimal(base_size = 14) +
+    scale_x_discrete(labels = c(0, 2, 4, 8, 16, 32, 64, 128)) +
+    scale_fill_manual(
+        values = c("#2c7bb6", "#d7191c"), 
+        labels = c("Fixed c", "Variable c")
+    ) +
+    labs(title = "", x = "Censoring Threshold", y = "log APE", fill = "Censoring Type")
+
+ggsave(
+    filename = file.path("output", "figures", "log_ape_variable_vs_fixed_censoring_new.png"), 
+    plot = variable_fixed_comparison_plot, width = 7, height = 5, dpi = 300
+)

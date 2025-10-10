@@ -191,3 +191,56 @@ for n_hidden in [1, 2, 3, 4]
 end
 
 vcat(n_hidden_outputs...) |> df -> CSV.write(joinpath("output", "n_hidden_sensitivity.csv"), df)
+
+
+
+## Compare the varied input censoring model with a fixed input censoring model
+#map(x -> train_model_mlp(4, 256, 3, 10_000, censoring_threshold = x, savepath = models_path), [0, 2, 4, 8, 16, 32, 64, 128])
+
+variable_censoring_model = load_model(
+    n_lists = 4, 
+    width = 256,
+    n_hidden = 3, 
+    censoring_threshold = -1,
+    train_size = 10_000, 
+    models_path = "output"
+)
+
+n_hidden = 3
+width = 256
+n_lists = 4
+train_size = 10_000
+
+variable_censoring_output = []
+for censoring_threshold in [0, 2, 4, 8, 16, 32, 64, 128]
+    fixed_censoring_model = load_model(
+        n_lists = n_lists, 
+        width = width,
+        n_hidden = n_hidden, 
+        censoring_threshold = censoring_threshold,
+        train_size = train_size, 
+        models_path = models_path
+    )
+    
+    test_data, test_pars = load_test_data(test_path, n_lists, censoring_threshold)
+    if censoring_threshold == 0
+        n_data, n_rep = size(test_data)
+        variable_test_data = vcat(test_data, zeros(Float32, n_data + 1, n_rep))
+    else
+        variable_test_data = vcat(test_data, fill(censoring_threshold, 1, size(test_data, 2)))  # Add the censoring threshold input
+    end
+    estimated_pars_var  = variable_censoring_model(variable_test_data)
+    estimated_pars_fix  = fixed_censoring_model(test_data)
+    APE_var = abs.((estimated_pars_var .- test_pars) ./ test_pars)
+    APE_fix = abs.((estimated_pars_fix .- test_pars) ./ test_pars)
+    
+    push!(variable_censoring_output, DataFrame(
+        censoring_threshold = censoring_threshold,
+        APE_var = APE_var[1, :],
+        APE_fix = APE_fix[1, :]
+    ))
+end
+
+vcat(variable_censoring_output...) |> df -> CSV.write(joinpath("output", "variable_vs_fixed_censoring.csv"), df)
+
+
