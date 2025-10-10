@@ -1,6 +1,5 @@
 pacman::p_load(tidyverse)
 
-
 ## Width sensitivity plot
 width_df <- read_csv(file.path("output", "width_sensitivity.csv"))
 
@@ -50,12 +49,12 @@ ggsave(
 
 
 ## number of hidden layers sensitivity
-n_layers_df <- read_csv(file.path("output", "n_layers_sensitivity.csv"))
+n_layers_df <- read_csv(file.path("output", "n_hidden_sensitivity.csv"))
 n_layers_plot <- n_layers_df %>% 
-    ggplot(aes(group = n_layers, y = log(APE))) +
+    ggplot(aes(group = n_hidden, y = log(APE))) +
     geom_boxplot(fill = "#2c7bb6", alpha = 0.6) +
     theme_minimal(base_size = 14) +
-    scale_x_discrete(labels = c(1, 2, 4, 8, 16)) +
+    scale_x_discrete(labels = c(1, 2, 3, 4)) +
     labs(title = "", x = "Number of Hidden Layers", y = "log APE")
 
 ggsave(

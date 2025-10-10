@@ -2,7 +2,7 @@
 
 include("mse_functions.jl")
 
-using Random, DataFrames
+using Random, DataFrames, CSV
 
 models_path = joinpath("output", "models")
 
@@ -142,7 +142,7 @@ vcat(censoring_outputs...) |> df -> CSV.write(joinpath("output", "censoring_sens
 
 ## now look at sensitivity to the number of lists
 
-map(x -> train_model_mlp(x, 128, 3, 10_000, censoring_threshold = 10, savepath = models_path), [3, 4, 5, 6, 10, 15])
+#map(x -> train_model_mlp(x, 128, 3, 10_000, censoring_threshold = 10, savepath = models_path), [3, 4, 5, 6, 10, 15])
 
 n_lists_outputs = []
 for n_lists in [3, 4, 5, 6, 10, 15]
@@ -168,7 +168,7 @@ vcat(n_lists_outputs...) |> df -> CSV.write(joinpath("output", "n_lists_sensitiv
 
 ## also look at the number of hidden layers
 
-map(x -> train_model_mlp(5, 128, x, 10_000, censoring_threshold = 10, savepath = models_path), [1, 2, 3, 4])
+#map(x -> train_model_mlp(5, 128, x, 10_000, censoring_threshold = 10, savepath = models_path), [1, 2, 3, 4])
 
 n_hidden_outputs = []
 for n_hidden in [1, 2, 3, 4]
