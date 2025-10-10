@@ -1,13 +1,12 @@
 ## Here we train a model that takes the censoring level as an input
 
-#using CUDA
-
 include("mse_functions.jl")
+
+using CUDA, cuDNN
 
 intercept_dist = Uniform(1, 10)
 intercept_support = ifelse(typeof(intercept_dist) <: Uniform, params(intercept_dist), nothing)
 
-censoring_threshold = 0  # No censoring
 sample_nbe(n_reps) = hcat([sample_parameters(n_lists, intercept_dist = intercept_dist) for _ in 1:n_reps]...)
 function simulate_nbe(θ, m)
     censoring_threshold = rand(DiscreteUniform(0, 16))
@@ -34,7 +33,8 @@ estimator = train(
     K = train_size,
     m = 1,
     epochs = 100,
-    stopping_epochs = 100
+    stopping_epochs = 100,
+    use_gpu = true
 )
 
 savepath = joinpath("output")
