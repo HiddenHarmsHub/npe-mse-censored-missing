@@ -61,7 +61,7 @@ CSV.write(joinpath("output", "test_summary.csv"), test_summary_df)
 
 
 
-train_model_mlp(5, 128, 3, 10_000, censoring_threshold = 10, savepath = models_path)
+#train_model_mlp(5, 128, 3, 10_000, censoring_threshold = 10, savepath = models_path)
 
 nbe_model = load_model(
     n_lists = 5, 
@@ -140,3 +140,54 @@ end
 
 vcat(censoring_outputs...) |> df -> CSV.write(joinpath("output", "censoring_sensitivity.csv"), df)
 
+## now look at sensitivity to the number of lists
+
+map(x -> train_model_mlp(x, 128, 3, 10_000, censoring_threshold = 10, savepath = models_path), [3, 4, 5, 6, 10, 15])
+
+n_lists_outputs = []
+for n_lists in [3, 4, 5, 6, 10, 15]
+    model = load_model(
+        n_lists = n_lists, 
+        width = 128,
+        n_hidden = 3, 
+        censoring_threshold = 10,
+        train_size = 10_000, 
+        models_path = models_path
+    )
+    
+    test_data, test_pars = load_test_data(test_path, n_lists, 10)
+    estimated_pars  = model(test_data)
+    APE = abs.((estimated_pars .- test_pars) ./ test_pars)
+    push!(n_lists_outputs, DataFrame(
+        n_lists = n_lists,
+        APE = APE[1, :]
+    ))
+end
+
+vcat(n_lists_outputs...) |> df -> CSV.write(joinpath("output", "n_lists_sensitivity.csv"), df)
+
+## also look at the number of hidden layers
+
+map(x -> train_model_mlp(5, 128, x, 10_000, censoring_threshold = 10, savepath = models_path), [1, 2, 3, 4])
+
+n_hidden_outputs = []
+for n_hidden in [1, 2, 3, 4]
+    model = load_model(
+        n_lists = 5, 
+        width = 128,
+        n_hidden = n_hidden, 
+        censoring_threshold = 10,
+        train_size = 10_000, 
+        models_path = models_path
+    )
+    
+    test_data, test_pars = load_test_data(test_path, 5, 10)
+    estimated_pars  = model(test_data)
+    APE = abs.((estimated_pars .- test_pars) ./ test_pars)
+    push!(n_hidden_outputs, DataFrame(
+        n_hidden = n_hidden,
+        APE = APE[1, :]
+    ))
+end
+
+vcat(n_hidden_outputs...) |> df -> CSV.write(joinpath("output", "n_hidden_sensitivity.csv"), df)
