@@ -1,8 +1,8 @@
 ## Here we train a model that takes the censoring level as an input
+using CUDA, cuDNN, Distributions, NeuralEstimators, Flux, BSON
 
 include("mse_functions.jl")
 
-using CUDA, cuDNN
 
 intercept_dist = Uniform(1, 10)
 intercept_support = ifelse(typeof(intercept_dist) <: Uniform, params(intercept_dist), nothing)
@@ -32,8 +32,8 @@ estimator = train(
     simulate_nbe, 
     K = train_size,
     m = 1,
-    epochs = 100,
-    stopping_epochs = 100,
+    epochs = 10,
+    stopping_epochs = 10,
     use_gpu = true
 )
 

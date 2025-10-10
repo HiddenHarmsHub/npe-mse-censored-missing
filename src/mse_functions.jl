@@ -1,5 +1,10 @@
 using Distributions, NeuralEstimators, Flux, BSON
 
+# Custom activation function for intercept scaling (Flux-style)
+function intercept_scaling(x, a, b)
+    return a .+ b .* sigmoid.(x)
+end
+
 function sample_parameters(
     K::Int; 
     intercept_dist = Uniform(1, 10), 
@@ -62,9 +67,10 @@ function construct_MLP(width::Int, n_hidden::Int, n_lists::Int, censoring::Bool 
     end
 
     if !isnothing(intercept_support)
+        a, b = Float32(intercept_support[1]), Float32(intercept_support[2])
         final_layer = Parallel(
             vcat,
-            Dense(width, 1, x -> intercept_support[1] .+ intercept_support[2] .* sigmoid.(x)),  # Compress to the support of the uniform prior
+            Dense(width, 1, x -> intercept_scaling(x, a, b)),  # Compress to the support of the uniform prior
             Dense(width, n_pars - 1, identity)  # Identity for betas and gammas
         )
     else
@@ -85,9 +91,10 @@ function construct_MLP_c(width::Int, n_hidden::Int, n_lists::Int, intercept_supp
     n_pars = 1 + n_data  # intercept + betas + gammas
 
     if !isnothing(intercept_support)
+        a, b = Float32(intercept_support[1]), Float32(intercept_support[2])
         final_layer = Parallel(
             vcat,
-            Dense(width, 1, x -> intercept_support[1] .+ intercept_support[2] .* sigmoid.(x)),  # Compress to the support of the uniform prior
+            Dense(width, 1, x -> intercept_scaling(x, a, b)),  # Compress to the support of the uniform prior
             Dense(width, n_pars - 1, identity)  # Identity for betas and gammas
         )
     else
