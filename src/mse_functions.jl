@@ -70,7 +70,7 @@ function construct_MLP(width::Int, n_hidden::Int, n_lists::Int, censoring::Bool 
         a, b = Float32(intercept_support[1]), Float32(intercept_support[2])
         final_layer = Parallel(
             vcat,
-            Dense(width, 1, x -> intercept_scaling(x, a, b)),  # Compress to the support of the uniform prior
+            Chain(Dense(width, 1, identity), Compress(a, b)),  # Compress to the support of the uniform prior
             Dense(width, n_pars - 1, identity)  # Identity for betas and gammas
         )
     else
@@ -94,7 +94,7 @@ function construct_MLP_c(width::Int, n_hidden::Int, n_lists::Int, intercept_supp
         a, b = Float32(intercept_support[1]), Float32(intercept_support[2])
         final_layer = Parallel(
             vcat,
-            Dense(width, 1, x -> intercept_scaling(x, a, b)),  # Compress to the support of the uniform prior
+            Chain(Dense(width, 1, identity), Compress(a, b)),  # Compress to the support of the uniform prior
             Dense(width, n_pars - 1, identity)  # Identity for betas and gammas
         )
     else
