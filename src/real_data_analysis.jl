@@ -14,8 +14,8 @@ model1 = load_model(
 
 silverman_par_estimates = model1(silverman_data)
 
-## Now analyse King data
 
+## Now analyse King data
 king_data = load_king_data()
 
 model_king = load_model(
@@ -23,7 +23,7 @@ model_king = load_model(
     width = 128, 
     censoring_threshold = 4, 
     n_hidden = 3, 
-    train_size = 10000
+    train_size = 100000
 )
 
-king_par_estimates = model1(king_data)
+king_par_estimates = model_king(king_data)
