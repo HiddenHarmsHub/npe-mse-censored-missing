@@ -108,12 +108,8 @@ function construct_MLP_c(width::Int, n_hidden::Int, n_lists::Int, intercept_supp
     )
 end
 
-function train_model_mlp(n_lists, width, n_hidden, train_size; m = 1, censoring_threshold = 0, savepath = nothing, overwrite = true, intercept_dist = Uniform(1, 10))
+function train_model_mlp(n_lists, width, n_hidden, train_size; m = 1, censoring_threshold = 0, savepath = nothing, intercept_dist = Uniform(1, 10))
     mdl_str = "model_$(n_lists)_$(width)_$(n_hidden)_$(censoring_threshold)_$(train_size).bson"
-    if !overwrite && savepath !== nothing && isfile(joinpath(savepath, mdl_str))
-        println("Model already exists at $(joinpath(savepath, mdl_str)). Loading existing model.")
-        return
-    end
 
     intercept_support = ifelse(typeof(intercept_dist) <: Uniform, params(intercept_dist), nothing)
 
