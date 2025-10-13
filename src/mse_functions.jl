@@ -1,4 +1,4 @@
-using Distributions, NeuralEstimators, Flux, BSON
+using Distributions, NeuralEstimators, Flux, BSON, DataFrames, CSV
 
 # Custom activation function for intercept scaling (Flux-style)
 function intercept_scaling(x, a, b)
@@ -182,4 +182,67 @@ function get_param_names(n_lists)
         ["beta_$(i)" for i in 1:n_lists],
         ["gamma_$(i),$(j)" for i in 1:(n_lists-1) for j in (i+1):n_lists]
     )
+end
+
+function load_silverman_data()
+    silverman_file_path = joinpath("data", "silverman.csv")
+    silverman_data = DataFrame(CSV.File(silverman_file_path))
+    silverman_data.group = string.(silverman_data.group)
+    K = maximum([maximum(parse.(Int, collect(filter(isdigit, g)))) for g in silverman_data.group])
+    output = Vector{Int}()
+    for i in 1:K
+        grp_loc = findfirst(silverman_data.group .== "$i")
+        if isnothing(grp_loc)
+            push!(output, 0)
+        else
+            push!(output, silverman_data.count[grp_loc])
+        end
+    end
+
+    for i in 1:K
+        for j in i+1:K
+            println("i = $i, j = $j")
+            loc = findfirst(silverman_data.group .== "$i$j")
+            if isnothing(loc)
+                push!(output, 0)
+            else
+                push!(output, silverman_data.count[loc])
+            end
+        end
+    end
+
+    return output
+end
+
+function load_king_data()
+    king_file_path = joinpath("data", "king.csv")
+    king_data = DataFrame(CSV.File(king_file_path))
+    king_data.group = string.(king_data.group)
+    K = maximum([maximum(parse.(Int, collect(filter(isdigit, g)))) for g in king_data.group])
+    output = []
+    for i in 1:K
+        grp_loc = findfirst(king_data.group .== "$i")
+        if isnothing(grp_loc)
+            push!(output, 0)
+        else
+            push!(output, king_data.count[grp_loc])
+        end
+    end
+
+    for i in 1:K
+        for j in i+1:K
+            println("i = $i, j = $j")
+            loc = findfirst(king_data.group .== "$i$j")
+            if isnothing(loc)
+                push!(output, 0)
+            else
+                push!(output, king_data.count[loc])
+            end
+        end
+    end
+
+    W = ifelse.(output .== "missing", 1.0, 0.0)
+    U = ifelse.(output .== "missing", -1.0, output)
+    U = parse.(Float64, string.(U))
+    return Float32.(vcat([u > 0 ? log(u + 1) : u for u in U], W))
 end
