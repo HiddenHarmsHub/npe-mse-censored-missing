@@ -33,7 +33,6 @@ function test_summary(models_path)
     output = []
     for model_file in model_files
         n_lists, width, n_hidden, censoring_threshold, train_size = parse.(Int, [m.match for m in eachmatch(r"\d+", model_file)])
-        censoring_threshold > 0 && continue
         model = load_model(model_file, models_path)
         test_data, test_pars = load_test_data(test_path, n_lists, censoring_threshold)
         estimated_pars  = model(test_data)
@@ -59,7 +58,32 @@ end
 test_summary_df = test_summary(models_path)
 CSV.write(joinpath("output", "test_summary.csv"), test_summary_df)
 
+function intercept_APE_summary(models_path)
+    model_files = readdir(models_path)
 
+    output = []
+    for model_file in model_files
+        n_lists, width, n_hidden, censoring_threshold, train_size = parse.(Int, [m.match for m in eachmatch(r"\d+", model_file)])
+        model = load_model(model_file, models_path)
+        test_data, test_pars = load_test_data(test_path, n_lists, censoring_threshold)
+        estimated_pars  = model(test_data)
+        APE = abs.((estimated_pars .- test_pars) ./ test_pars)
+        push!(output, DataFrame(
+            n_lists=n_lists, 
+            width=width, 
+            n_hidden=n_hidden, 
+            train_size=train_size, 
+            censoring_threshold=censoring_threshold,
+            parameter = "intercept",
+            APE = vec(APE[1, :])
+        ))
+    end
+
+    return vcat(output...)
+end
+
+intercept_ape_df = intercept_APE_summary(models_path)
+CSV.write(joinpath("output", "intercept_ape_summary.csv"), intercept_ape_df)
 
 #train_model_mlp(5, 128, 3, 10_000, censoring_threshold = 10, savepath = models_path)
 
