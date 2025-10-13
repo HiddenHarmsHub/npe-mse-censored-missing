@@ -112,8 +112,7 @@ function train_model_mlp(n_lists, width, n_hidden, train_size; m = 1, censoring_
     mdl_str = "model_$(n_lists)_$(width)_$(n_hidden)_$(censoring_threshold)_$(train_size).bson"
     if !overwrite && savepath !== nothing && isfile(joinpath(savepath, mdl_str))
         println("Model already exists at $(joinpath(savepath, mdl_str)). Loading existing model.")
-        BSON.@load joinpath(savepath, mdl_str) estimator
-        return estimator
+        return
     end
 
     intercept_support = ifelse(typeof(intercept_dist) <: Uniform, params(intercept_dist), nothing)
@@ -133,9 +132,10 @@ function train_model_mlp(n_lists, width, n_hidden, train_size; m = 1, censoring_
 
     if !isnothing(savepath) 
         BSON.@save joinpath(savepath, mdl_str) estimator
+    else
+        return estimator
     end
-
-    return estimator
+    return
 end
 
 function load_model(n_lists, width, n_hidden, censoring_threshold, train_size, models_path)
