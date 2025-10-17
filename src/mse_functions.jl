@@ -1,67 +1,95 @@
-using Distributions, NeuralEstimators, Flux, BSON, DataFrames, CSV
-
-# Custom activation function for intercept scaling (Flux-style)
-function intercept_scaling(x, a, b)
-    return a .+ b .* sigmoid.(x)
-end
+using Distributions, NeuralEstimators, Flux, BSON, DataFrames, CSV, Combinatorics
 
 function sample_parameters(
     K::Int; 
     intercept_dist = Uniform(1, 10), 
     beta_dist = Normal(0, 4), 
-    gamma_dist = Normal(0, 1/5)
+    gamma_dist = Normal(0, 1/5),
+    max_pair_effect = 20
 )
-    while true
-        intercept = rand(intercept_dist)
-        betas = rand(beta_dist, K)
-        gammas = rand(gamma_dist, binomial(K, 2))
-        valid = true
-        for i in 1:K-1
-            for j in i+1:K
-                if intercept + betas[i] + betas[j] >= 25
-                    valid = false
-                    break
-                end
-            end
-            if !valid
-                break
-            end
+    intercept = rand(intercept_dist)
+    betas = rand(beta_dist, K)
+    gammas = rand(gamma_dist, binomial(K, 2))
+    return Float32.(vcat(intercept, betas, gammas))
+end
+
+function enumerate_two_digit_numbers(K::Int)
+    numbers = Vector{Int64}[]
+    for i in 1:K-1
+        for j in i+1:K
+            push!(numbers, [i, j])
         end
-        if valid
-            return Float32.(vcat(intercept, betas, gammas))
-        end
+    end
+    return numbers
+end
+
+## Custom Poisson sampler to avoid overflow
+## rough error point is around logλ = 43.669
+function rpois(logλ; logλ_max = 43.0)
+    if logλ > logλ_max  
+        return rand(Poisson(exp(logλ_max)))
+    else
+        return rand(Poisson(exp(logλ)))
     end
 end
 
-function simulate_data(params, m; censoring_threshold = 0)
-    K = Int(-0.5 + (sqrt(8 * length(params) - 7) / 2))  # Solve for K given length of params
-    intercept = params[1]
-    betas = params[2:1+K]
-    gammas = params[2+K:end]
+function simulate_data(pars, m; censoring_lower = 0, censoring_threshold = 0)
+    K = Int(-0.5 + (sqrt(8 * length(pars) - 7) / 2))  # Solve for K given length of pars
+    intercept = pars[1]
+    betas = pars[2:1+K]
+    gammas = pars[2+K:end]
 
-    Z = zeros(K + binomial(K, 2), m)
+    Z = zeros(2^K - 1, m)
+    lists = enumerate_all_combinations(K)
+    γ_map = Dict(enumerate_two_digit_numbers(K) .=> collect(1:length(gammas)))
+    for j in 1:m
+        for (i, list) in enumerate(lists)
+            logλ = intercept
+            digits, digit_pairs = compute_digit_pairs(list)
+            for digit in digits
+                logλ += betas[digit]
+            end
 
-    for i in 1:m
-        main_counts = [rand(Poisson(exp(intercept + betas[j]))) for j in 1:K]
-        pair_counts = [
-            rand(Poisson(exp(intercept + betas[j] + betas[k] + gammas[binomial(K, 2) - binomial(K - j + 1, 2) + (k - j)])))
-            for j in 1:K-1 for k in j+1:K
-        ]
-        Z[:, i] = vcat(main_counts, pair_counts)
+            for pair in digit_pairs
+                logλ += gammas[γ_map[pair]]
+            end
+            Z[i, j] = rpois(logλ)
+        end
     end
 
     if censoring_threshold > 0
-        W = 1 * (Z .<= censoring_threshold)
-        U = ifelse.(Z .<= censoring_threshold, -1.0, log.(Z .+ 1))
+        W = 1 * (censoring_lower .<= Z .<= censoring_threshold)
+        U = ifelse.(censoring_lower .<= Z .<= censoring_threshold, -1.0, log.(Z .+ 1))
         return Float32.(vcat(U, W))
     end
 
     return Float32.(log.(Z .+ 1))  # Log-transform the counts
 end
 
+function enumerate_all_combinations(K::Int64)
+    combos = String[]
+    for n in 1:K
+        for c in combinations(1:K, n)
+            push!(combos, join(c, ","))
+        end
+    end
+    return combos
+end
+
+function compute_digit_pairs(n::String)
+    n_split = split(n, ",")
+    combinations(1, 2)
+    if length(n_split) == 1
+        return [parse(Int, n)], []
+    end
+    digits = [parse(Int, d) for d in n_split]
+    pairs = collect(combinations(digits, 2))
+    return digits, pairs
+end
+
 function construct_MLP(width::Int, n_hidden::Int, n_lists::Int, censoring::Bool = false, intercept_support = nothing)
-    n_data = n_lists + binomial(n_lists, 2)
-    n_pars = 1 + n_data  # intercept + betas + gammas
+    n_data = 2^n_lists - 1
+    n_pars = 1 + n_lists + binomial(n_lists, 2)  # intercept + betas + gammas
     if censoring
         n_data *= 2  # Double the input size for censored data (U and W)
     end
@@ -85,10 +113,9 @@ function construct_MLP(width::Int, n_hidden::Int, n_lists::Int, censoring::Bool 
 end
 
 function construct_MLP_c(width::Int, n_hidden::Int, n_lists::Int, intercept_support = nothing)
-    n_data = n_lists + binomial(n_lists, 2)
+    n_data = 2^n_lists - 1
+    n_pars = 1 + n_lists + binomial(n_lists, 2)  # intercept + betas + gammas
     n_input = n_data * 2 + 1
-
-    n_pars = 1 + n_data  # intercept + betas + gammas
 
     if !isnothing(intercept_support)
         a, b = Float32(intercept_support[1]), Float32(intercept_support[2])
@@ -108,8 +135,8 @@ function construct_MLP_c(width::Int, n_hidden::Int, n_lists::Int, intercept_supp
     )
 end
 
-function train_model_mlp(n_lists, width, n_hidden, train_size; m = 1, censoring_threshold = 0, savepath = nothing, intercept_dist = Uniform(1, 10))
-    mdl_str = "model_$(n_lists)_$(width)_$(n_hidden)_$(censoring_threshold)_$(train_size).bson"
+function train_model_mlp(n_lists, width, n_hidden, train_size; m = 1, censoring_lower = 0, censoring_threshold = 0, savepath = nothing, intercept_dist = Uniform(1, 10))
+    mdl_str = "model_$(n_lists)_$(width)_$(n_hidden)_$(train_size)_$(censoring_lower)_$(censoring_threshold)_$(m).bson"
 
     intercept_support = ifelse(typeof(intercept_dist) <: Uniform, params(intercept_dist), nothing)
 
@@ -241,8 +268,20 @@ function load_king_data()
         end
     end
 
+
+    for (i, j, k) in enumerate_three_digit_numbers(K)
+        loc = findfirst(king_data.group .== "$i$j$k")
+        if isnothing(loc)
+            push!(output, 0)
+        else
+            push!(output, king_data.count[loc])
+        end
+    end
+
     W = ifelse.(output .== "missing", 1.0, 0.0)
     U = ifelse.(output .== "missing", -1.0, output)
     U = parse.(Float64, string.(U))
     return Float32.(vcat([u > 0 ? log(u + 1) : u for u in U], W))
 end
+
+
