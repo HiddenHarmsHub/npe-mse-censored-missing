@@ -4,3 +4,4 @@ output/architectures_censored/
 output/architectures*/
 output/models/
 src/old/
+output/test_data/
