@@ -19,6 +19,14 @@ using Turing, Folds
 end
 
 function run_mcmc_test_slice(slice_idx, n_lists, test_data, test_pars; num_chains = 4, samples_path = nothing, summary_path = nothing, n_iterations = 5000)
+    samples_file = joinpath(samples_path, "mcmc_test_results_$slice_idx.csv")
+    summary_file = joinpath(summary_path, "mcmc_test_summary_$slice_idx.csv")
+
+    if isfile(samples_file) && isfile(summary_file)
+        println("MCMC results and summary for slice $slice_idx already exist. Skipping...")
+        return
+    end
+
     n_data = 2^n_lists - 1
     mcmc_test_data = test_data[1:n_data, slice_idx]
 
@@ -48,10 +56,7 @@ function run_mcmc_test_slice(slice_idx, n_lists, test_data, test_pars; num_chain
     res_df = select(res_df, r"intercept|betas|gammas")
 
     if !isnothing(samples_path)
-        CSV.write(
-            joinpath(samples_path, "mcmc_test_results_$slice_idx.csv"), 
-            res_df
-        )
+        CSV.write(samples_file, res_df)
     end
 
     summstats = summarystats(chains)
@@ -68,10 +73,7 @@ function run_mcmc_test_slice(slice_idx, n_lists, test_data, test_pars; num_chain
     )
 
     if !isnothing(summary_path)
-        CSV.write(
-            joinpath(summary_path, "mcmc_test_summary_$slice_idx.csv"), 
-            summary_df
-        )
+        CSV.write(summary_file, summary_df)
     end
 end
 
