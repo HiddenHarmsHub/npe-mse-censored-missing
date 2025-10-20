@@ -1,6 +1,5 @@
 pacman::p_load(tidyverse)
 
-
 ape_df <- read_csv(file.path("output", "intercept_ape_summary.csv"))
 
 train_size_fixed <- 10000
@@ -108,3 +107,145 @@ ggsave(
     filename = file.path("output", "figures", "log_ape_vs_alpha.png"), 
     plot = intercept_sensitivity, width = 7, height = 5, dpi = 300
 )
+
+
+## Print the table of cnesoring APEs
+censoring_summary_table <- ape_df %>% 
+    filter(
+        n_lists == 5, 
+        train_size == train_size_fixed,
+        width == 256,
+        n_hidden == 3
+    ) %>% 
+    group_by(censoring_threshold) %>% 
+    summarise(
+        `1st Qu.` = quantile(APE, 0.75),
+        Median = median(APE),
+        Mean = mean(APE),
+        `3rd Qu.` = quantile(APE, 0.25)
+    ) %>%
+    pivot_longer(-censoring_threshold, names_to = "Statistic", values_to = "Value") %>%
+    pivot_wider(names_from = censoring_threshold, values_from = Value)
+
+## Print for latex
+censoring_summary_table %>%
+    mutate(across(where(is.numeric), ~round(., 2))) %>%
+    {
+        cat(names(.), sep = " & ")
+        cat(" \\\\\n")
+        pwalk(., ~{cat(..., sep = " & "); cat(" \\\\\n")})
+    }
+
+
+
+
+### Compare MCMC estimates
+
+mcmc_files <- list.files(
+    path = file.path("output", "mcmc_summary"), 
+    pattern = "*.csv", 
+    full.names = TRUE
+)
+
+read_csv(mcmc_files[1])
+
+mcmc_df <- lapply(mcmc_files, function(mcmc_file) {
+    mcmc_df <- read_csv(mcmc_file, show_col_types = FALSE)
+    mcmc_df$dataset <- parse_number(mcmc_file)
+    return(mcmc_df[1,])
+}) %>% 
+    bind_rows() %>% 
+    select(
+        dataset, 
+        true_intercept = true_values, 
+        median_mcmc = estimated_medians,
+        rhat
+    )
+
+reduced_ape_df <- ape_df %>% 
+    filter( 
+        n_lists == 5, 
+        train_size == train_size_fixed,
+        censoring_threshold == 10,
+        width == 256,
+        n_hidden == 3
+    ) %>% 
+    select(
+        dataset,
+        median_nbe = intercept_estimated
+    )
+
+mcmc_nbe_comparison_df <- mcmc_df %>% 
+    left_join(reduced_ape_df) %>%
+    mutate(
+        ape_mcmc = abs((exp(true_intercept) - exp(median_mcmc)) / exp(true_intercept)),
+        ape_nbe = abs((exp(true_intercept) - exp(median_nbe)) / exp(true_intercept))
+    )
+
+mcmc_nbe_comparison_df %>% 
+    ggplot(aes(x = median_mcmc, y = median_nbe)) +
+    geom_point(alpha = 0.6, color = "#2c7bb6", size = 2) +       # points
+    geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "red") +
+    labs(
+        x = expression("NPE Estimated " * exp(alpha)),
+        y = expression("MCMC Estimated " * exp(alpha)),
+        title = "Comparison of NPE and MCMC Estimates of exp(alpha)"
+    ) +
+    theme_minimal(base_size = 14) +
+    theme(
+        plot.title = element_text(face = "bold"),
+        panel.grid.minor = element_blank()
+    )
+
+
+mcmc_nbe_comparison_df %>% 
+    ggplot(aes(x = exp(median_mcmc), y = exp(median_mcmc))) +
+    geom_point(alpha = 0.6, color = "#2c7bb6", size = 2) +       # points
+    geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "red") +
+    labs(
+        x = expression("NPE Estimated " * exp(alpha)),
+        y = expression("MCMC Estimated " * exp(alpha)),
+        title = "Comparison of NPE and MCMC Estimates of exp(alpha)"
+    ) +
+    theme_minimal(base_size = 14) +
+    theme(
+        plot.title = element_text(face = "bold"),
+        panel.grid.minor = element_blank()
+    )
+
+mcmc_nbe_comparison_df %>% 
+    ggplot(aes(x = ape_mcmc, y = ape_nbe, col = rhat)) +
+    geom_point(alpha = 0.6, color = "#2c7bb6", size = 2) +       # points
+    geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "red") +
+    labs(
+        x = "MCMC APE",
+        y = "NPE APE",
+        title = "Comparison of NPE and MCMC APEs"
+    ) +
+    theme_minimal(base_size = 14) +
+    theme(
+        plot.title = element_text(face = "bold"),
+        panel.grid.minor = element_blank()
+    )
+
+mcmc_nbe_comparison_df %>% 
+    ggplot(aes(x = log(ape_mcmc), y = log(ape_nbe), col = rhat)) +
+    geom_point(alpha = 0.6, color = "#2c7bb6", size = 2) +       # points
+    geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "red") +
+    labs(
+        x = "MCMC Log APE",
+        y = "NPE Log APE",
+        title = "Comparison of NPE and MCMC Log APEs"
+    ) +
+    theme_minimal(base_size = 14) +
+    theme(
+        plot.title = element_text(face = "bold"),
+        panel.grid.minor = element_blank()
+    )
+
+
+
+mcmc_df %>% 
+    left_join(reduced_ape_df) %>% 
+    arrange(desc(rhat))
+

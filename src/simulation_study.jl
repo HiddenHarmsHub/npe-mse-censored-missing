@@ -73,6 +73,7 @@ function intercept_APE_summary(models_path)
         estimated_pars  = model(test_data)
         APE = abs.((estimated_pars .- test_pars) ./ test_pars)
         push!(output, DataFrame(
+            dataset = 1:size(test_pars, 2),
             n_lists=n_lists, 
             width=width, 
             n_hidden=n_hidden, 
