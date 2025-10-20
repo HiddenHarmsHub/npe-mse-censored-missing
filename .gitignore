@@ -5,3 +5,5 @@ output/architectures*/
 output/models/
 src/old/
 output/test_data/
+output/mcmc_samples/
+output/mcmc_summary/
