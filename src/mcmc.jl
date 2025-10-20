@@ -18,7 +18,7 @@ using Turing, Folds
     Turing.@addlogprob!(likelihood_censored(y, params, X, censoring_lower, censoring_threshold))
 end
 
-function run_mcmc_test_slice(slice_idx, n_lists, test_data, test_pars; num_chains = 4, samples_path = nothing, summary_path = nothing, n_iterations = 5000)
+function run_mcmc_test_slice(slice_idx, n_lists, test_data, test_pars; num_chains = 4, samples_path = nothing, summary_path = nothing, n_iterations = 2000)
     samples_file = joinpath(samples_path, "mcmc_test_results_$slice_idx.csv")
     summary_file = joinpath(summary_path, "mcmc_test_summary_$slice_idx.csv")
 
