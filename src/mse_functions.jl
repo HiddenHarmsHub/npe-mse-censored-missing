@@ -4,8 +4,7 @@ function sample_parameters(
     K::Int; 
     intercept_dist = Uniform(1, 10), 
     beta_dist = Normal(0, 4), 
-    gamma_dist = Normal(0, 1/5),
-    max_pair_effect = 20
+    gamma_dist = Normal(0, 1/5)
 )
     intercept = rand(intercept_dist)
     betas = rand(beta_dist, K)
@@ -287,3 +286,39 @@ function load_king_data()
 end
 
 
+function one_hot_encode_parameters(K::Int)
+    n_gamma = binomial(K, 2)
+    n_pars = 1 + K + n_gamma
+    one_hot_matrix = zeros(Int64, 2^K - 1, n_pars)
+    lists = enumerate_all_combinations(K)
+    γ_map = Dict(enumerate_two_digit_numbers(K) .=> collect(1:n_gamma))
+    for (i, list) in enumerate(lists)
+        digits, digit_pairs = compute_digit_pairs(list)
+        one_hot_matrix[i, 1] = 1.0  # Intercept
+        for digit in digits
+            one_hot_matrix[i, 1 + digit] = 1.0
+        end
+        for pair in digit_pairs
+            one_hot_matrix[i, 1 + K + γ_map[pair]] = 1.0
+        end
+    end
+
+    return one_hot_matrix
+end
+
+
+function likelihood_censored(counts::Vector{Int64}, pars::Vector, X::Matrix{Int64}, censoring_lower::Int, censoring_threshold::Int)
+    rates = exp.(X * pars)
+    ll = 0.0
+    for (rate, count) in zip(rates, counts)
+        if count == -1
+            # P(0 <= X <= censoring_threshold) = F(censoring_threshold; λ) - F(0; λ)
+            for k in censoring_lower:censoring_threshold
+                ll += k * log.(rate) .- rate 
+            end
+        else
+            ll += count .* log.(rate) .- rate
+        end
+    end
+    return ll
+end
