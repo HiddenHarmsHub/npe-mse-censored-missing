@@ -42,17 +42,6 @@ grid_censoring = collect(Base.product(
     [1]
 ))[:]
 
-## multiple datasets per model
-grid_m = collect(Base.product(
-    [5],
-    [256],
-    [3],
-    [10000, 100000],
-    [0],
-    [10],
-    [1, 5, 10, 50, 100, 500]
-))[:]
-
 ## Test various architectures for 5 lists
 grid_5 = collect(Base.product(
     [5],
@@ -75,7 +64,7 @@ grid_4 = collect(Base.product(
     [1]
 ))[:]
 
-grid = vcat(grid_lists, grid_neurons, grid_censoring, grid_m, grid_5, grid_4)
+grid = vcat(grid_lists, grid_neurons, grid_censoring, grid_5, grid_4)
 
 println("Total models to train: ", length(grid))
 
@@ -109,4 +98,5 @@ pmap(
     end,
     grid
 )
+
 
