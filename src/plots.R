@@ -147,8 +147,6 @@ mcmc_files <- list.files(
     full.names = TRUE
 )
 
-read_csv(mcmc_files[1])
-
 mcmc_df <- lapply(mcmc_files, function(mcmc_file) {
     mcmc_df <- read_csv(mcmc_file, show_col_types = FALSE)
     mcmc_df$dataset <- parse_number(mcmc_file)
