@@ -155,14 +155,14 @@ function train_model_mlp(n_lists, width, n_hidden, train_size; m = 1, censoring_
 
     if !isnothing(savepath) 
         BSON.@save joinpath(savepath, mdl_str) estimator
+        return nothing
     else
         return estimator
     end
-    return
 end
 
-function load_model(n_lists, width, n_hidden, censoring_threshold, train_size, models_path)
-    mdl_str = "model_$(n_lists)_$(width)_$(n_hidden)_$(censoring_threshold)_$(train_size).bson"
+function load_model(n_lists, width, n_hidden, train_size, censoring_lower, censoring_threshold, m, models_path)
+    mdl_str = "model_$(n_lists)_$(width)_$(n_hidden)_$(train_size)_$(censoring_lower)_$(censoring_threshold)_$m.bson"
     if isfile(joinpath(models_path, mdl_str))
         model = BSON.load(joinpath(models_path, mdl_str))
         return model[:estimator]
@@ -181,23 +181,25 @@ function load_model(mdl_str, models_path)
 end
 
 function load_model(; 
-    n_lists = n_lists, 
-    width = width, 
-    n_hidden = n_hidden, 
-    censoring_threshold = censoring_threshold, 
-    train_size = train_size, 
+    n_lists, 
+    width, 
+    n_hidden, 
+    train_size, 
+    censoring_lower,
+    censoring_threshold,
+    m, 
     models_path = joinpath("output", "models")
 )
-    load_model(n_lists, width, n_hidden, censoring_threshold, train_size, models_path)
+    load_model(n_lists, width, n_hidden, train_size, censoring_lower, censoring_threshold, m, models_path)
 end
 
 
-function load_test_data(test_path, list_size, censoring_threshold = 0)
+function load_test_data(test_path, list_size, censoring_lower = 0, censoring_threshold = 0)
     test_data = BSON.load(joinpath(test_path, "test_data_$list_size.bson"))
     if censoring_threshold > 0
         Z_test = test_data[:Z_test]
-        W = 1 * (Z_test .<= log(censoring_threshold + 1))
-        U = ifelse.(Z_test .<= log(censoring_threshold + 1), -1.0, Z_test)
+        W = 1 * (log(censoring_lower + 1) .<= Z_test .<= log(censoring_threshold + 1))
+        U = ifelse.(log(censoring_lower + 1) .<= Z_test .<= log(censoring_threshold + 1), -1.0, Z_test)
         return Float32.(vcat(U, W)), test_data[:params]
     end
     return test_data[:Z_test], test_data[:params]

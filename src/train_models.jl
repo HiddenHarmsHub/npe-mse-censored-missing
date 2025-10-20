@@ -6,6 +6,9 @@ addprocs(SlurmManager(); exeflags=["--threads", "1", "--project"])
 
 ## Train models for each of the sensitivity analyses
 
+println("Available worker count: ", nworkers())
+println("Worker IDs: ", workers())
+
 ## Number of lists
 grid_lists = collect(Base.product(
     [3, 4, 5, 6, 10, 15],
@@ -74,6 +77,8 @@ grid_4 = collect(Base.product(
 
 grid = vcat(grid_lists, grid_neurons, grid_censoring, grid_m, grid_5, grid_4)
 
+println("Total models to train: ", length(grid))
+
 grid = sort(grid, by = x -> x[4]) ## ensure lower training sizes are done first
 grid = filter(model -> model[5] <= model[6], grid)
 
@@ -81,6 +86,8 @@ overwrite_models = false
 if !overwrite_models
     grid = filter(model -> !isfile(joinpath("output", "models", "model_$(model[1])_$(model[2])_$(model[3])_$(model[4])_$(model[5])_$(model[6])_$(model[7]).bson")), grid)
 end
+
+println("Models to train after filtering: ", length(grid))
 
 output_path = joinpath("output", "models")
 mkpath(output_path)
