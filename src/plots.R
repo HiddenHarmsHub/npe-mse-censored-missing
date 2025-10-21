@@ -227,7 +227,7 @@ mcmc_nbe_comparison_df %>%
     )
 
 mcmc_nbe_comparison_df %>% 
-    ggplot(aes(x = log(ape_mcmc), y = log(ape_nbe), col = rhat)) +
+    ggplot(aes(x = log(ape_mcmc), y = log(ape_nbe))) +
     geom_point(alpha = 0.6, color = "#2c7bb6", size = 2) +       # points
     geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "red") +
     labs(
@@ -241,6 +241,36 @@ mcmc_nbe_comparison_df %>%
         panel.grid.minor = element_blank()
     )
 
+
+mcmc_nbe_comparison_df %>% 
+    ggplot(aes(x = log(ape_mcmc), y = log(ape_nbe), color = rhat > 1.2)) +
+    geom_point(alpha = 0.6, size = 2) +       # points
+    scale_color_manual(
+        values = c("FALSE" = "#2c7bb6", "TRUE" = "red"),
+        labels = c("FALSE" = "rhat <= 1.2", "TRUE" = "rhat > 1.2"),
+        name = "rhat"
+    ) +
+    geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "red") +
+    labs(
+        x = "MCMC Log APE",
+        y = "NPE Log APE",
+        title = "Comparison of NPE and MCMC Log APEs"
+    ) +
+    theme_minimal(base_size = 14) +
+    theme(
+        plot.title = element_text(face = "bold"),
+        panel.grid.minor = element_blank()
+    )
+
+mcmc_nbe_comparison_df %>%
+    pivot_longer(
+        cols = c(ape_mcmc, ape_nbe),
+        names_to = "Method",
+        values_to = "APE"
+    ) %>%
+    ggplot(aes(x = true_intercept, y = log(APE), col = Method)) +
+    geom_point() +
+    geom_smooth(method = "lm", se = FALSE)
 
 
 mcmc_df %>% 
