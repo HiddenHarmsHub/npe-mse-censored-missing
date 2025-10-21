@@ -135,7 +135,8 @@ function construct_MLP_c(width::Int, n_hidden::Int, n_lists::Int, intercept_supp
 end
 
 function train_model_mlp(n_lists, width, n_hidden, train_size; m = 1, censoring_lower = 0, censoring_threshold = 0, savepath = nothing, intercept_dist = Uniform(1, 10))
-    mdl_str = "model_$(n_lists)_$(width)_$(n_hidden)_$(train_size)_$(censoring_lower)_$(censoring_threshold)_$(m).bson"
+    estimator_mdl_str = "model_$(n_lists)_$(width)_$(n_hidden)_$(train_size)_$(censoring_lower)_$(censoring_threshold)_$(m).bson"
+    ci_mdl_str = "model_ci_$(n_lists)_$(width)_$(n_hidden)_$(train_size)_$(censoring_lower)_$(censoring_threshold)_$(m).bson"
 
     intercept_support = ifelse(typeof(intercept_dist) <: Uniform, params(intercept_dist), nothing)
 
@@ -143,6 +144,8 @@ function train_model_mlp(n_lists, width, n_hidden, train_size; m = 1, censoring_
     simulate_nbe(θ, m) = hcat([simulate_data(params, m, censoring_threshold = censoring_threshold) for params in eachcol(θ)]...)
     network = construct_MLP(width, n_hidden, n_lists, censoring_threshold > 0, intercept_support)
     estimator = PointEstimator(network)
+
+    ci_estimator = IntervalEstimator(network)
 
     estimator = train(
         estimator, 
@@ -152,8 +155,17 @@ function train_model_mlp(n_lists, width, n_hidden, train_size; m = 1, censoring_
         m = m
     )
 
+    ci_estimator = train(
+        ci_estimator, 
+        sample_nbe, 
+        simulate_nbe, 
+        K = train_size,
+        m = m
+    )
+
     if !isnothing(savepath) 
-        BSON.@save joinpath(savepath, mdl_str) estimator
+        BSON.@save joinpath(savepath, estimator_mdl_str) estimator
+        BSON.@save joinpath(savepath, ci_mdl_str) ci_estimator
         return nothing
     else
         return estimator
