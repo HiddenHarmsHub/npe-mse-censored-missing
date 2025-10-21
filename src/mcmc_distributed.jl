@@ -91,20 +91,37 @@ mcmc_summary_path = joinpath("output", "mcmc_summary")
 mkpath(mcmc_samples_path)
 mkpath(mcmc_summary_path)
 
-pmap(
-    slice_idx ->  begin
-        wid = myid()
-        println("Worker $wid running ")
-        run_mcmc_test_slice(
-            slice_idx,
-            n_lists, 
-            test_data, 
-            test_pars; 
-            num_chains = 4, 
-            samples_path = mcmc_samples_path, 
-            summary_path = mcmc_summary_path
-        )
-    end,
-    #1:size(test_data, 2)
-    1:96
-)
+# split work into batches and pmap each batch
+#batch_size = 12
+#total_slices = size(test_data, 2)
+batch_size = 3
+total_slices = 96
+
+slices = 1:total_slices
+
+function chunk_indices(r, bs)
+    idxs = collect(r)
+    [idxs[i:min(i+bs-1, end)] for i in 1:bs:length(idxs)]
+end
+
+batches = chunk_indices(slices, batch_size)
+
+for (bnum, batch) in enumerate(batches)
+    println("Starting batch $bnum/$(length(batches)) with $(length(batch)) slices")
+    pmap(
+        slice_idx -> begin
+            wid = myid()
+            println("Worker $wid running slice $slice_idx")
+            run_mcmc_test_slice(
+                slice_idx,
+                n_lists,
+                test_data,
+                test_pars;
+                num_chains = 4,
+                samples_path = mcmc_samples_path,
+                summary_path = mcmc_summary_path
+            )
+        end,
+        batch
+    )
+end
