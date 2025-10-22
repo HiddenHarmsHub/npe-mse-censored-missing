@@ -21,16 +21,10 @@ addprocs(SlurmManager(); exeflags=["--threads", "1", "--project"])
 end
 
 @everywhere function run_mcmc_test_slice(slice_idx, n_lists, test_data, test_pars; num_chains = 4, samples_path = nothing, summary_path = nothing, n_iterations = 5000)
-
     println("Running MCMC for slice $slice_idx...")
 
     samples_file = joinpath(samples_path, "mcmc_test_results_$slice_idx.csv")
     summary_file = joinpath(summary_path, "mcmc_test_summary_$slice_idx.csv")
-
-    if isfile(samples_file) && isfile(summary_file)
-        println("MCMC results and summary for slice $slice_idx already exist. Skipping...")
-        return
-    end
 
     n_data = 2^n_lists - 1
     mcmc_test_data = test_data[1:n_data, slice_idx]
@@ -91,6 +85,21 @@ mcmc_summary_path = joinpath("output", "mcmc_summary")
 mkpath(mcmc_samples_path)
 mkpath(mcmc_summary_path)
 
+overwrite_files = false
+test_idx = 1:size(test_data, 2)
+
+if !overwrite_files
+    test_idx = filter(
+        slice_idx ->  begin
+            samples_file = joinpath(mcmc_samples_path, "mcmc_test_results_$slice_idx.csv")
+            summary_file = joinpath(mcmc_summary_path, "mcmc_test_summary_$slice_idx.csv")
+            !(isfile(samples_file) && isfile(summary_file))
+        end,
+        collect(test_idx)
+    )
+end
+
+
 pmap(
     slice_idx ->  begin
         wid = myid()
@@ -105,5 +114,5 @@ pmap(
             summary_path = mcmc_summary_path
         )
     end,
-    1:size(test_data, 2)
+    test_idx
 )
