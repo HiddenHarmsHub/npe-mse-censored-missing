@@ -185,6 +185,9 @@ end
 function load_model(mdl_str, models_path)
     if isfile(joinpath(models_path, mdl_str))
         model = BSON.load(joinpath(models_path, mdl_str))
+        if occursin("ci_", mdl_str)
+            return model[:ci_estimator]
+        end
         return model[:estimator]
     else
         error("Model file $(mdl_str) not found in $(models_path).")

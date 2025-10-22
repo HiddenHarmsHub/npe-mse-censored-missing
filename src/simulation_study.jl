@@ -31,7 +31,7 @@ for K in list_sizes
 end
 
 function test_summary(models_path)
-    model_files = readdir(models_path)
+    model_files = filter(x -> !occursin("ci", x), readdir(models_path))
 
     output = []
     for model_file in model_files
@@ -63,14 +63,18 @@ test_summary_df = test_summary(models_path)
 CSV.write(joinpath("output", "test_summary.csv"), test_summary_df)
 
 function intercept_APE_summary(models_path)
-    model_files = readdir(models_path)
+    model_files = filter(x -> !occursin("ci", x), readdir(models_path))
 
     output = []
     for model_file in model_files
         n_lists, width, n_hidden, train_size, censoring_lower, censoring_threshold, m = parse.(Int, [m.match for m in eachmatch(r"\d+", model_file)])
         model = load_model(model_file, models_path)
+        model_cis = load_model(replace(model_file, "model_" => "model_ci_"), models_path)
         test_data, test_pars = load_test_data(test_path, n_lists, censoring_lower, censoring_threshold)
+        n_pars = size(test_pars, 1)
         estimated_pars  = model(test_data)
+        estimated_cis = model_cis(test_data)
+
         APE = abs.((estimated_pars .- test_pars) ./ test_pars)
         push!(output, DataFrame(
             dataset = 1:size(test_pars, 2),
@@ -82,6 +86,8 @@ function intercept_APE_summary(models_path)
             parameter = "intercept",
             intercept_truth = test_pars[1, :],
             intercept_estimated = estimated_pars[1, :],
+            intercept_lower_ci = estimated_cis[1, :],
+            intercept_upper_ci = estimated_cis[n_pars + 1, :],
             APE = vec(APE[1, :])
         ))
     end
@@ -91,4 +97,3 @@ end
 
 intercept_ape_df = intercept_APE_summary(models_path)
 CSV.write(joinpath("output", "intercept_ape_summary.csv"), intercept_ape_df)
-
