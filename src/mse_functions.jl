@@ -270,32 +270,11 @@ function load_king_data()
     king_file_path = joinpath("data", "king.csv")
     king_data = DataFrame(CSV.File(king_file_path))
     king_data.group = string.(king_data.group)
-    K = maximum([maximum(parse.(Int, collect(filter(isdigit, g)))) for g in king_data.group])
+    lists = enumerate_all_combinations(4)
     output = []
-    for i in 1:K
-        grp_loc = findfirst(king_data.group .== "$i")
-        if isnothing(grp_loc)
-            push!(output, 0)
-        else
-            push!(output, king_data.count[grp_loc])
-        end
-    end
-
-    for i in 1:K
-        for j in i+1:K
-            println("i = $i, j = $j")
-            loc = findfirst(king_data.group .== "$i$j")
-            if isnothing(loc)
-                push!(output, 0)
-            else
-                push!(output, king_data.count[loc])
-            end
-        end
-    end
-
-
-    for (i, j, k) in enumerate_three_digit_numbers(K)
-        loc = findfirst(king_data.group .== "$i$j$k")
+    for list in lists
+        grp_str = replace(join(list, ""), "," => "")
+        loc = findfirst(king_data.group .== grp_str)
         if isnothing(loc)
             push!(output, 0)
         else
