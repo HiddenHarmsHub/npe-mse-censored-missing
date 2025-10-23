@@ -45,7 +45,6 @@ function simulate_data(pars, m; censoring_lower = 0, censoring_threshold = 0)
         for (i, list) in enumerate(lists)
             logλ = intercept
             digits, digit_pairs = compute_digit_pairs(list)
-            println("digit_pairs = $digit_pairs")
             for digit in digits
                 logλ += betas[digit]
             end
