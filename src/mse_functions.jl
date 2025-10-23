@@ -310,18 +310,3 @@ function one_hot_encode_parameters(K::Int)
 end
 
 
-function likelihood_censored(counts::Vector{Int64}, pars::Vector, X::Matrix{Int64}, censoring_lower::Int, censoring_threshold::Int)
-    rates = exp.(X * pars)
-    ll = 0.0
-    for (rate, count) in zip(rates, counts)
-        if count == -1
-            # P(0 <= X <= censoring_threshold) = F(censoring_threshold; λ) - F(0; λ)
-            for k in censoring_lower:censoring_threshold
-                ll += k * log.(rate) .- rate 
-            end
-        else
-            ll += count .* log.(rate) .- rate
-        end
-    end
-    return ll
-end
