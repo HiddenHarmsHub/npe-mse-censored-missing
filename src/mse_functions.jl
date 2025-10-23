@@ -32,7 +32,7 @@ function rpois(logλ; logλ_max = 43.0)
     end
 end
 
-function simulate_data(pars, m; censoring_lower = 0, censoring_threshold = 0, filter_terms = nothing)
+function simulate_data(pars, m; censoring_lower = 0, censoring_threshold = 0)
     K = Int(-0.5 + (sqrt(8 * length(pars) - 7) / 2))  # Solve for K given length of pars
     intercept = pars[1]
     betas = pars[2:1+K]
@@ -44,8 +44,48 @@ function simulate_data(pars, m; censoring_lower = 0, censoring_threshold = 0, fi
     for j in 1:m
         for (i, list) in enumerate(lists)
             logλ = intercept
-            digits, digit_pairs = compute_digit_pairs(list, filter_terms = filter_terms)
+            digits, digit_pairs = compute_digit_pairs(list)
             println("digit_pairs = $digit_pairs")
+            for digit in digits
+                logλ += betas[digit]
+            end
+
+            for pair in digit_pairs
+                logλ += gammas[γ_map[pair]]
+            end
+            Z[i, j] = rpois(logλ)
+        end
+    end
+
+    if censoring_threshold > 0
+        W = 1 * (censoring_lower .<= Z .<= censoring_threshold)
+        U = ifelse.(censoring_lower .<= Z .<= censoring_threshold, -1.0, log.(Z .+ 1))
+        return Float32.(vcat(U, W))
+    end
+
+    return Float32.(log.(Z .+ 1))  # Log-transform the counts
+end
+
+function simulate_data_filtered(pars, m; censoring_lower = 0, censoring_threshold = 0, K = nothing, filter_terms = nothing)
+    isnothing(K) && error("K must be provided for filtered data simulation.")
+        
+    intercept = pars[1]
+    betas = pars[2:1+K]
+    gammas = pars[2+K:end]
+
+    if length(gammas) != length(filter_terms)
+        error("Length of gammas does not match length of filter_terms.")
+    end
+
+    Z = zeros(2^K - 1, m)
+    lists = enumerate_all_combinations(K)
+    γ_map = Dict(filter(x -> x in filter_terms, enumerate_two_digit_numbers(K)) .=> collect(1:length(gammas)))
+    for j in 1:m
+        for (i, list) in enumerate(lists)
+            logλ = intercept
+            digits, digit_pairs = compute_digit_pairs(list)
+            println("digit_pairs = $digit_pairs")
+            digit_pairs = filter(x -> x in filter_terms, digit_pairs)
             for digit in digits
                 logλ += betas[digit]
             end
@@ -145,7 +185,7 @@ function train_model_mlp(n_lists, width, n_hidden, train_size; m = 1, censoring_
     intercept_support = ifelse(typeof(intercept_dist) <: Uniform, params(intercept_dist), nothing)
 
     sample_nbe(n_reps) = hcat([sample_parameters(n_lists, intercept_dist = intercept_dist) for _ in 1:n_reps]...)
-    simulate_nbe(θ, m) = hcat([simulate_data(params, m, censoring_threshold = censoring_threshold) for params in eachcol(θ)]...)
+    simulate_nbe(θ, m) = hcat([simulate_data(params, m, censoring_lower = censoring_lower, censoring_threshold = censoring_threshold) for params in eachcol(θ)]...)
     network = construct_MLP(width, n_hidden, n_lists, censoring_threshold > 0, intercept_support)
     estimator = PointEstimator(network)
 
