@@ -182,6 +182,20 @@ function load_model(n_lists, width, n_hidden, train_size, censoring_lower, censo
     end
 end
 
+function load_model(n_lists, width, n_hidden, train_size, censoring_lower, censoring_threshold, m, models_path, ci::Bool)
+    if !ci
+        load_model(n_lists, width, n_hidden, train_size, censoring_lower, censoring_threshold, m, models_path)
+    else
+        mdl_str = "model_ci_$(n_lists)_$(width)_$(n_hidden)_$(train_size)_$(censoring_lower)_$(censoring_threshold)_$m.bson"
+        if isfile(joinpath(models_path, mdl_str))
+            model = BSON.load(joinpath(models_path, mdl_str))
+            return model[:ci_estimator]
+        else
+            error("Model file $(mdl_str) not found in $(models_path).")
+        end
+    end 
+end
+
 function load_model(mdl_str, models_path)
     if isfile(joinpath(models_path, mdl_str))
         model = BSON.load(joinpath(models_path, mdl_str))
@@ -201,11 +215,14 @@ function load_model(;
     train_size, 
     censoring_lower,
     censoring_threshold,
-    m, 
+    m,
+    ci = false, 
     models_path = joinpath("output", "models")
 )
-    load_model(n_lists, width, n_hidden, train_size, censoring_lower, censoring_threshold, m, models_path)
+    load_model(n_lists, width, n_hidden, train_size, censoring_lower, censoring_threshold, m, models_path, ci)
 end
+
+
 
 
 function load_test_data(test_path, list_size, censoring_lower = 0, censoring_threshold = 0)
@@ -227,35 +244,27 @@ function get_param_names(n_lists)
     )
 end
 
-function load_silverman_data()
-    silverman_file_path = joinpath("data", "silverman.csv")
+function load_silverman_data(K::Int = 5)
+    silverman_file_path = joinpath("data", "silverman_$K.csv")
+    if !isfile(silverman_file_path)
+        error("Silverman data file not found: $silverman_file_path")
+    end
     silverman_data = DataFrame(CSV.File(silverman_file_path))
     silverman_data.group = string.(silverman_data.group)
-    K = maximum([maximum(parse.(Int, collect(filter(isdigit, g)))) for g in silverman_data.group])
+    lists = enumerate_all_combinations(5)
     output = Vector{Int}()
-    for i in 1:K
-        grp_loc = findfirst(silverman_data.group .== "$i")
-        if isnothing(grp_loc)
+    for list in lists
+        grp_str = replace(join(list, ""), "," => "")
+        loc = findfirst(silverman_data.group .== grp_str)
+        if isnothing(loc)
             push!(output, 0)
         else
-            push!(output, silverman_data.count[grp_loc])
+            push!(output, silverman_data.count[loc])
         end
     end
-
-    for i in 1:K
-        for j in i+1:K
-            println("i = $i, j = $j")
-            loc = findfirst(silverman_data.group .== "$i$j")
-            if isnothing(loc)
-                push!(output, 0)
-            else
-                push!(output, silverman_data.count[loc])
-            end
-        end
-    end
-
     return output
 end
+
 
 function load_king_data()
     king_file_path = joinpath("data", "king.csv")
