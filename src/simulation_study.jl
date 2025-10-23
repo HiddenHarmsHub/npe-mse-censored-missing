@@ -30,6 +30,11 @@ for K in list_sizes
     println("Generated test data for K=$K")
 end
 
+## Also save K=5 to csv for comaprison with MCMC
+test_data, test_pars = load_test_data(test_path, 5, 0, 10)
+CSV.write(joinpath("output", "test_data_K5.csv"), DataFrame(test_data, :auto))
+
+## Now provide a summary of the test results for each model
 function test_summary(models_path)
     model_files = filter(x -> !occursin("ci", x), readdir(models_path))
 
@@ -44,7 +49,8 @@ function test_summary(models_path)
             n_lists=n_lists, 
             width=width, 
             n_hidden=n_hidden, 
-            train_size=train_size, 
+            train_size=train_size,
+            censoring_lower=censoring_lower, 
             censoring_threshold=censoring_threshold,
             parameter = get_param_names(n_lists),
             bias = vec(mean(estimated_pars .- test_pars, dims=2)), 
