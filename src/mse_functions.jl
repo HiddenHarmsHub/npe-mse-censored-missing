@@ -32,7 +32,7 @@ function rpois(logλ; logλ_max = 43.0)
     end
 end
 
-function simulate_data(pars, m; censoring_lower = 0, censoring_threshold = 0)
+function simulate_data(pars, m; censoring_lower = 0, censoring_threshold = 0, filter_terms = nothing)
     K = Int(-0.5 + (sqrt(8 * length(pars) - 7) / 2))  # Solve for K given length of pars
     intercept = pars[1]
     betas = pars[2:1+K]
@@ -44,7 +44,8 @@ function simulate_data(pars, m; censoring_lower = 0, censoring_threshold = 0)
     for j in 1:m
         for (i, list) in enumerate(lists)
             logλ = intercept
-            digits, digit_pairs = compute_digit_pairs(list)
+            digits, digit_pairs = compute_digit_pairs(list, filter_terms = filter_terms)
+            println("digit_pairs = $digit_pairs")
             for digit in digits
                 logλ += betas[digit]
             end
@@ -75,7 +76,7 @@ function enumerate_all_combinations(K::Int64)
     return combos
 end
 
-function compute_digit_pairs(n::String)
+function compute_digit_pairs(n::String; filter_terms = nothing)
     n_split = split(n, ",")
     combinations(1, 2)
     if length(n_split) == 1
@@ -83,6 +84,9 @@ function compute_digit_pairs(n::String)
     end
     digits = [parse(Int, d) for d in n_split]
     pairs = collect(combinations(digits, 2))
+    if !isnothing(filter_terms)
+        pairs = filter(x -> x in filter_terms, pairs)
+    end
     return digits, pairs
 end
 
