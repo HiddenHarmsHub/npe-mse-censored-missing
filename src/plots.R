@@ -22,7 +22,6 @@ ggsave(
     plot = width_plot, width = 7, height = 5, dpi = 300
 )
 
-
 ## Censoring threshold sensitivity plot
 censoring_plot <- ape_df %>% 
     filter(
@@ -39,7 +38,6 @@ ggsave(
     filename = file.path("output", "figures", "log_ape_vs_threshold.png"), 
     plot = censoring_plot, width = 7, height = 5, dpi = 300
 )
-
 
 ## number of lists sensitivity
 n_lists_plot <- ape_df %>% 
@@ -59,7 +57,6 @@ ggsave(
     plot = n_lists_plot, width = 7, height = 5, dpi = 300
 )
 
-
 ## hidden layers sensitivity
 hidden_layers_plot <- ape_df %>% 
     filter(
@@ -78,7 +75,6 @@ ggsave(
     plot = hidden_layers_plot, width = 7, height = 5, dpi = 300
 )
 
-
 ## alpha sensitivity
 intercept_sensitivity <- ape_df %>% 
     filter(
@@ -92,7 +88,7 @@ intercept_sensitivity <- ape_df %>%
         error = abs(intercept_estimated - intercept_truth)
     ) %>%
     ggplot(aes(x = exp(intercept_truth), y = log(APE))) +
-    geom_point(alpha = 0.6, color = "#2c7bb6", size = 2) +       # points
+    geom_point(alpha = 0.6, color = "#2c7bb6", size = 2) +
     labs(
         x = expression("True exp" * alpha),
         y = "Log APE",
@@ -107,7 +103,6 @@ ggsave(
     filename = file.path("output", "figures", "log_ape_vs_alpha.png"), 
     plot = intercept_sensitivity, width = 7, height = 5, dpi = 300
 )
-
 
 ## Print the table of cnesoring APEs
 censoring_summary_table <- ape_df %>% 
@@ -140,7 +135,6 @@ censoring_summary_table %>%
 
 
 ### Compare MCMC estimates
-
 mcmc_files <- list.files(
     path = file.path("output", "mcmc_summary"), 
     pattern = "*.csv", 
@@ -157,8 +151,16 @@ mcmc_df <- lapply(mcmc_files, function(mcmc_file) {
         dataset, 
         true_intercept = true_values, 
         median_mcmc = estimated_medians,
+        lower_ci = lower_95ci,
+        upper_ci = upper_95ci,
         rhat
     )
+
+write.csv(
+    mcmc_df, 
+    file.path("output", "mcmc_intercept_summary.csv"), 
+    row.names = FALSE
+)
 
 reduced_ape_df <- ape_df %>% 
     filter( 
