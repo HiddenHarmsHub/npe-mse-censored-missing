@@ -49,7 +49,18 @@ grid_5 = collect(Base.product(
     [1, 2, 3, 4],
     [10000],
     [0],
-    [10],
+    [0],
+    [1]
+))[:]
+
+## Test various architectures for 6 lists
+grid_6 = collect(Base.product(
+    [6],
+    [8, 16, 32, 64, 128, 256],
+    [1, 2, 3, 4],
+    [10000],
+    [0],
+    [0],
     [1]
 ))[:]
 
@@ -64,7 +75,7 @@ grid_4 = collect(Base.product(
     [1]
 ))[:]
 
-grid = vcat(grid_lists, grid_neurons, grid_censoring, grid_5, grid_4)
+grid = vcat(grid_lists, grid_neurons, grid_censoring, grid_4, grid_5, grid_6)
 
 println("Total models to train: ", length(grid))
 
