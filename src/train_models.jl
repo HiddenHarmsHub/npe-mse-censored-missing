@@ -42,6 +42,17 @@ grid_censoring = collect(Base.product(
     [1]
 ))[:]
 
+## Test various architectures for 4 lists, censoring 1-4
+grid_4 = collect(Base.product(
+    [4],
+    [8, 16, 32, 64, 128, 256],
+    [1, 2, 3, 4],
+    [10000],
+    [1],
+    [4],
+    [1]
+))[:]
+
 ## Test various architectures for 5 lists
 grid_5 = collect(Base.product(
     [5],
@@ -64,16 +75,7 @@ grid_6 = collect(Base.product(
     [1]
 ))[:]
 
-## Test various architectures for 4 lists, censoring 1-4
-grid_4 = collect(Base.product(
-    [4],
-    [8, 16, 32, 64, 128, 256],
-    [1, 2, 3, 4],
-    [10000],
-    [1],
-    [4],
-    [1]
-))[:]
+
 
 grid = vcat(grid_lists, grid_neurons, grid_censoring, grid_4, grid_5, grid_6)
 
