@@ -1,14 +1,6 @@
-## Here we run use MCMC to infer model parameters and compare those
-## with that obtained through NBE
-using Pkg; Pkg.activate(".")
-using Distributed, SlurmClusterManager
-addprocs(SlurmManager(); exeflags=["--threads", "1", "--project"])
+using Turing
 
-@everywhere include("mse_functions.jl")
-
-@everywhere using Turing
-
-@everywhere @model function mse_model_censored(y, X, intercept_dist, beta_dist, gamma_dist, censoring_lower, censoring_threshold)
+@model function mse_model_censored(y, X, intercept_dist, beta_dist, gamma_dist, censoring_lower, censoring_threshold)
     n_pars = size(X, 2)
     K = Int(-0.5 + (sqrt(8 * (n_pars - 1) + 1) / 2))  # Solve for K given length of params
     intercept ~ intercept_dist
@@ -20,7 +12,7 @@ addprocs(SlurmManager(); exeflags=["--threads", "1", "--project"])
     Turing.@addlogprob!(likelihood_censored(y, params, X, censoring_lower, censoring_threshold))
 end
 
-@everywhere function run_mcmc_test_slice(slice_idx, n_lists, test_data, test_pars; num_chains = 4, samples_path = nothing, summary_path = nothing, n_iterations = 5000)
+function run_mcmc_test_slice(slice_idx, n_lists, test_data, test_pars; num_chains = 4, samples_path = nothing, summary_path = nothing, n_iterations = 5000)
     println("Running MCMC for slice $slice_idx...")
 
     samples_file = joinpath(samples_path, "mcmc_test_results_$slice_idx.csv")
@@ -75,44 +67,18 @@ end
     end
 end
 
-
-test_path = joinpath("output", "test_data")
-n_lists = 5
-test_data, test_pars = load_test_data(test_path, n_lists, 0, 10)
-
-mcmc_samples_path = joinpath("output", "mcmc_samples")
-mcmc_summary_path = joinpath("output", "mcmc_summary")
-mkpath(mcmc_samples_path)
-mkpath(mcmc_summary_path)
-
-overwrite_files = false
-test_idx = 1:size(test_data, 2)
-
-if !overwrite_files
-    test_idx = filter(
-        slice_idx ->  begin
-            samples_file = joinpath(mcmc_samples_path, "mcmc_test_results_$slice_idx.csv")
-            summary_file = joinpath(mcmc_summary_path, "mcmc_test_summary_$slice_idx.csv")
-            !(isfile(samples_file) && isfile(summary_file))
-        end,
-        collect(test_idx)
-    )
+function likelihood_censored(counts::Vector{Int64}, pars::Vector, X::Matrix{Int64}, censoring_lower::Int, censoring_threshold::Int)
+    rates = exp.(X * pars)
+    ll = 0.0
+    for (rate, count) in zip(rates, counts)
+        if count == -1
+            # P(0 <= X <= censoring_threshold) = F(censoring_threshold; λ) - F(0; λ)
+            for k in censoring_lower:censoring_threshold
+                ll += k * log.(rate) .- rate 
+            end
+        else
+            ll += count .* log.(rate) .- rate
+        end
+    end
+    return ll
 end
-
-
-pmap(
-    slice_idx ->  begin
-        wid = myid()
-        println("Worker $wid running ")
-        run_mcmc_test_slice(
-            slice_idx,
-            n_lists, 
-            test_data, 
-            test_pars; 
-            num_chains = 4, 
-            samples_path = mcmc_samples_path, 
-            summary_path = mcmc_summary_path
-        )
-    end,
-    test_idx
-)
