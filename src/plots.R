@@ -135,32 +135,39 @@ censoring_summary_table %>%
 
 
 ### Compare MCMC estimates
-mcmc_files <- list.files(
-    path = file.path("output", "mcmc_summary"), 
-    pattern = "*.csv", 
-    full.names = TRUE
-)
 
-mcmc_df <- lapply(mcmc_files, function(mcmc_file) {
-    mcmc_df <- read_csv(mcmc_file, show_col_types = FALSE)
-    mcmc_df$dataset <- parse_number(mcmc_file)
-    return(mcmc_df[1,])
-}) %>% 
-    bind_rows() %>% 
-    select(
-        dataset, 
-        true_intercept = true_values, 
-        median_mcmc = estimated_medians,
-        lower_ci = lower_95ci,
-        upper_ci = upper_95ci,
-        rhat
+mcmc_intercept_summary_file <- file.path("output", "mcmc_intercept_summary.csv")
+
+if(file.exists(mcmc_intercept_summary_file)) {
+    mcmc_df <- read_csv(mcmc_intercept_summary_file, show_col_types = FALSE)
+} else {
+    mcmc_files <- list.files(
+        path = file.path("output", "mcmc_summary"), 
+        pattern = "*.csv", 
+        full.names = TRUE
     )
 
-write.csv(
-    mcmc_df, 
-    file.path("output", "mcmc_intercept_summary.csv"), 
-    row.names = FALSE
-)
+    mcmc_df <- lapply(mcmc_files, function(mcmc_file) {
+        mcmc_df <- read_csv(mcmc_file, show_col_types = FALSE)
+        mcmc_df$dataset <- parse_number(mcmc_file)
+        return(mcmc_df[1,])
+    }) %>% 
+        bind_rows() %>% 
+        select(
+            dataset, 
+            true_intercept = true_values, 
+            median_mcmc = estimated_medians,
+            lower_ci = lower_95ci,
+            upper_ci = upper_95ci,
+            rhat
+        )
+
+    write.csv(
+        mcmc_df, 
+        file.path("output", "mcmc_intercept_summary.csv"), 
+        row.names = FALSE
+    )
+}
 
 reduced_ape_df <- ape_df %>% 
     filter( 
@@ -182,100 +189,74 @@ mcmc_nbe_comparison_df <- mcmc_df %>%
         ape_nbe = abs((exp(true_intercept) - exp(median_nbe)) / exp(true_intercept))
     )
 
-mcmc_nbe_comparison_df %>% 
-    ggplot(aes(x = median_mcmc, y = median_nbe)) +
-    geom_point(alpha = 0.6, color = "#2c7bb6", size = 2) +       # points
-    geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "red") +
-    labs(
-        x = expression("NPE Estimated " * exp(alpha)),
-        y = expression("MCMC Estimated " * exp(alpha)),
-        title = "Comparison of NPE and MCMC Estimates of exp(alpha)"
-    ) +
-    theme_minimal(base_size = 14) +
-    theme(
-        plot.title = element_text(face = "bold"),
-        panel.grid.minor = element_blank()
-    )
 
-
-mcmc_nbe_comparison_df %>% 
-    ggplot(aes(x = exp(median_mcmc), y = exp(median_mcmc))) +
-    geom_point(alpha = 0.6, color = "#2c7bb6", size = 2) +       # points
-    geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "red") +
-    labs(
-        x = expression("NPE Estimated " * exp(alpha)),
-        y = expression("MCMC Estimated " * exp(alpha)),
-        title = "Comparison of NPE and MCMC Estimates of exp(alpha)"
-    ) +
-    theme_minimal(base_size = 14) +
-    theme(
-        plot.title = element_text(face = "bold"),
-        panel.grid.minor = element_blank()
-    )
-
-mcmc_nbe_comparison_df %>% 
-    ggplot(aes(x = ape_mcmc, y = ape_nbe, col = rhat)) +
-    geom_point(alpha = 0.6, color = "#2c7bb6", size = 2) +       # points
-    geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "red") +
-    labs(
-        x = "MCMC APE",
-        y = "NPE APE",
-        title = "Comparison of NPE and MCMC APEs"
-    ) +
-    theme_minimal(base_size = 14) +
-    theme(
-        plot.title = element_text(face = "bold"),
-        panel.grid.minor = element_blank()
-    )
-
-mcmc_nbe_comparison_df %>% 
-    ggplot(aes(x = log(ape_mcmc), y = log(ape_nbe))) +
-    geom_point(alpha = 0.6, color = "#2c7bb6", size = 2) +       # points
-    geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "red") +
-    labs(
-        x = "MCMC Log APE",
-        y = "NPE Log APE",
-        title = "Comparison of NPE and MCMC Log APEs"
-    ) +
-    theme_minimal(base_size = 14) +
-    theme(
-        plot.title = element_text(face = "bold"),
-        panel.grid.minor = element_blank()
-    )
-
-
-mcmc_nbe_comparison_df %>% 
-    ggplot(aes(x = log(ape_mcmc), y = log(ape_nbe), color = rhat > 1.2)) +
-    geom_point(alpha = 0.6, size = 2) +       # points
-    scale_color_manual(
-        values = c("FALSE" = "#2c7bb6", "TRUE" = "red"),
-        labels = c("FALSE" = "rhat <= 1.2", "TRUE" = "rhat > 1.2"),
-        name = "rhat"
-    ) +
-    geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "red") +
-    labs(
-        x = "MCMC Log APE",
-        y = "NPE Log APE",
-        title = "Comparison of NPE and MCMC Log APEs"
-    ) +
-    theme_minimal(base_size = 14) +
-    theme(
-        plot.title = element_text(face = "bold"),
-        panel.grid.minor = element_blank()
-    )
-
-mcmc_nbe_comparison_df %>%
+mcmc_nbe_intercept_comparison_plot <- mcmc_nbe_comparison_df %>%
+    filter(rhat <= 1.01) %>%
     pivot_longer(
         cols = c(ape_mcmc, ape_nbe),
         names_to = "Method",
         values_to = "APE"
     ) %>%
-    ggplot(aes(x = true_intercept, y = log(APE), col = Method)) +
+    mutate(Method = recode(Method, "ape_mcmc" = "MCMC", "ape_nbe" = "NBE")) %>%
+    ggplot(aes(x = exp(true_intercept), y = log(APE), col = Method)) +
     geom_point() +
-    geom_smooth(method = "lm", se = FALSE)
+    geom_smooth(method = "lm", se = TRUE) +
+    labs(
+        x = expression("True exp" * alpha),
+        y = "Log APE",
+    ) +
+    theme_minimal(base_size = 14) +
+    theme(
+        plot.title = element_text(face = "bold"),
+        panel.grid.minor = element_blank(),
+        legend.position = "top"
+    )
 
+ggsave(
+    filename = file.path("output", "figures", "mcmc_nbe_intercept_comparison.png"), 
+    plot = mcmc_nbe_intercept_comparison_plot, width = 7, height = 5, dpi = 300
+)
 
-mcmc_df %>% 
-    left_join(reduced_ape_df) %>% 
-    arrange(desc(rhat))
+extract_main_lists <- function(idx, test_data) {
+    out <- data.frame(t(floor(exp(test_data[1:15, idx] - 1))))
+    names(out) <- c(paste0("L_", 1:5), paste0("L_", c(12, 13, 14, 15, 23, 24, 25, 34, 35, 45)))
+    out$dataset <- idx
+    rownames(out) <- NULL
+    return(out)
+}
+
+test_data <- read_csv(file.path("output", "test_data_K5.csv"))
+test_df <- lapply(1:ncol(test_data), function(i) extract_main_lists(i, test_data)) %>% 
+    bind_rows()
+
+convergence_comparison <- mcmc_nbe_comparison_df %>% 
+    left_join(test_df, by = "dataset") %>%
+    rowwise() %>%
+    mutate(
+        convergence = ifelse(rhat > 1.01, FALSE, TRUE),
+        main_list_mean = mean(c(L_1, L_2, L_3, L_4, L_5))
+    ) %>%
+    ungroup() %>%
+    ggplot(aes(x = log(main_list_mean), fill = convergence)) +
+    geom_density(alpha = 0.5) +
+    scale_fill_manual(
+        values = c("FALSE" = "red", "TRUE" = "#2c7bb6"),
+        labels = c("FALSE" = "R > 1.01", "TRUE" = "R \u2264 1.01")
+    ) +
+    labs(
+        x = "Log Mean of Main Lists",
+        y = "Density",
+        fill = "GR Statistic"
+    ) +
+    theme_minimal(base_size = 14) +
+    theme(
+        plot.title = element_text(face = "bold"),
+        panel.grid.minor = element_blank(),
+        legend.position = "top"
+    )
+
+ggsave(
+    filename = file.path("output", "figures", "convergence_comparison.png"), 
+    plot = convergence_comparison, width = 7, height = 5, dpi = 300
+)
 
