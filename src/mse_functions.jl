@@ -83,7 +83,6 @@ function simulate_data_filtered(pars, m; censoring_lower = 0, censoring_threshol
         for (i, list) in enumerate(lists)
             logλ = intercept
             digits, digit_pairs = compute_digit_pairs(list)
-            println("digit_pairs = $digit_pairs")
             digit_pairs = filter(x -> x in filter_terms, digit_pairs)
             for digit in digits
                 logλ += betas[digit]
