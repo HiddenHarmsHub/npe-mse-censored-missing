@@ -75,7 +75,8 @@ grid_6 = collect(Base.product(
     [1]
 ))[:]
 
-
+output_path = joinpath("output", "models")
+mkpath(output_path)
 
 grid = vcat(grid_lists, grid_neurons, grid_censoring, grid_4, grid_5, grid_6)
 
@@ -86,14 +87,10 @@ grid = filter(model -> model[5] <= model[6], grid)
 
 overwrite_models = false
 if !overwrite_models
-    grid = filter(model -> !isfile(joinpath("output", "models", "model_$(model[1])_$(model[2])_$(model[3])_$(model[4])_$(model[5])_$(model[6])_$(model[7]).bson")), grid)
+    grid = filter(model -> !isfile(joinpath(output_path, "model_$(model[1])_$(model[2])_$(model[3])_$(model[4])_$(model[5])_$(model[6])_$(model[7]).bson")), grid)
 end
 
 println("Models to train after filtering: ", length(grid))
-
-output_path = joinpath("output", "models")
-mkpath(output_path)
-
 
 ## First train regular models
 pmap(
@@ -130,6 +127,10 @@ grid_ds = collect(Base.product(
     [10],
     [1, 5, 10, 25, 50]
 ))[:]
+
+if !overwrite_models
+    grid_ds = filter(model -> !isfile(joinpath(outpath_path_ds, "model_$(model[1])_$(model[2])_$(model[3])_$(model[4])_$(model[5])_$(model[6])_$(model[7])_$(model[8]).bson")), grid_ds)
+end
 
 pmap(
     model -> begin
