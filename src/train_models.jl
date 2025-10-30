@@ -122,12 +122,12 @@ mkpath(outpath_path_ds)
 
 grid_ds = collect(Base.product(
     [6],
-    [64, 128, 256],
-    [1, 2, 3, 4],
-    [1, 2, 3, 4],
+    [128, 256],
+    [1, 2, 3],
+    [1, 2, 3],
     [10000],
     [0],
-    [0],
+    [10],
     [1, 5, 10, 25, 50]
 ))[:]
 
@@ -147,9 +147,8 @@ pmap(
             savepath = outpath_path_ds
         )
     end,
-    grid
+    grid_ds
 )
 
 
 
-train_model_ds(5, 128, 2, 2, 10000, m = 1, censoring_lower = 0, censoring_threshold = 0, savepath = nothing, intercept_dist = Uniform(1, 10))
