@@ -94,6 +94,8 @@ println("Models to train after filtering: ", length(grid))
 output_path = joinpath("output", "models")
 mkpath(output_path)
 
+
+## First train regular models
 pmap(
     model -> begin
         wid = myid()
@@ -112,4 +114,42 @@ pmap(
     grid
 )
 
+println("Finished training regular models. Now training deepset models...")
 
+## Then train deepset models
+outpath_path_ds = joinpath("output", "models_ds")
+mkpath(outpath_path_ds)
+
+grid_ds = collect(Base.product(
+    [6],
+    [64, 128, 256],
+    [1, 2, 3, 4],
+    [1, 2, 3, 4],
+    [10000],
+    [0],
+    [0],
+    [1, 5, 10, 25, 50]
+))[:]
+
+pmap(
+    model -> begin
+        wid = myid()
+        println("Worker $wid running with parameters: list_size=$(model[1]), width=$(model[2]), n_encoder=$(model[3]), n_decoder=$(model[4]), train_size=$(model[5]), censoring_lower=$(model[6]) censoring_threshold=$(model[7]), m=$(model[8])")
+        train_model_ds(
+            model[1],
+            model[2],
+            model[3], 
+            model[4],
+            model[5], 
+            censoring_lower = model[6],
+            censoring_threshold = model[7],
+            m = model[8],
+            savepath = outpath_path_ds
+        )
+    end,
+    grid
+)
+
+
+
+train_model_ds(5, 128, 2, 2, 10000, m = 1, censoring_lower = 0, censoring_threshold = 0, savepath = nothing, intercept_dist = Uniform(1, 10))

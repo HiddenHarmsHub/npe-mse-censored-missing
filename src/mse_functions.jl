@@ -214,6 +214,80 @@ function train_model_mlp(n_lists, width, n_hidden, train_size; m = 1, censoring_
     end
 end
 
+function train_model_mlp(n_lists, width, n_hidden, train_size; m = 1, censoring_lower = 0, censoring_threshold = 0, savepath = nothing, intercept_dist = Uniform(1, 10))
+    estimator_mdl_str = "model_$(n_lists)_$(width)_$(n_hidden)_$(train_size)_$(censoring_lower)_$(censoring_threshold)_$(m).bson"
+
+    intercept_support = ifelse(typeof(intercept_dist) <: Uniform, params(intercept_dist), nothing)
+
+    sample_nbe(n_reps) = hcat([sample_parameters(n_lists, intercept_dist = intercept_dist) for _ in 1:n_reps]...)
+    simulate_nbe(θ, m) = hcat([simulate_data(params, m, censoring_lower = censoring_lower, censoring_threshold = censoring_threshold) for params in eachcol(θ)]...)
+    network = construct_MLP(width, n_hidden, n_lists, censoring_threshold > 0, intercept_support)
+    estimator = QuantileEstimator(network)
+
+    estimator = train(
+        estimator, 
+        sample_nbe, 
+        simulate_nbe, 
+        K = train_size,
+        m = m
+    )
+
+    if !isnothing(savepath) 
+        BSON.@save joinpath(savepath, estimator_mdl_str) estimator
+        return nothing
+    else
+        return estimator
+    end
+end
+
+
+function train_model_ds(n_lists, width, n_encoder, n_decoder, train_size; m = 1, censoring_lower = 0, censoring_threshold = 0, savepath = nothing, intercept_dist = Uniform(1, 10))
+    estimator_mdl_str = "model_$(n_lists)_$(width)_$(n_encoder)_$(n_decoder)_$(train_size)_$(censoring_lower)_$(censoring_threshold)_$(m).bson"
+
+    n_data = 2^n_lists - 1
+    n_pars = 1 + n_lists + binomial(n_lists, 2)  # intercept + betas + gammas
+    if censoring_threshold > 0
+        n_data *= 2  # Double the input size for censored data (U and W)
+    end
+
+    intercept_support = ifelse(typeof(intercept_dist) <: Uniform, params(intercept_dist), nothing)
+
+    sample_nbe(n_reps) = hcat([sample_parameters(n_lists, intercept_dist = intercept_dist) for _ in 1:n_reps]...)
+    simulate_nbe(θ, m) = [simulate_data(params, m, censoring_lower = censoring_lower, censoring_threshold = censoring_threshold) for params in eachcol(θ)]
+
+    if !isnothing(intercept_support)
+        a, b = Float32(intercept_support[1]), Float32(intercept_support[2])
+        final_layer = Parallel(
+            vcat,
+            Chain(Dense(width, 1, identity), Compress(a, b)),  # Compress to the support of the uniform prior
+            Dense(width, n_pars - 1, identity)  # Identity for betas and gammas
+        )
+    else
+        final_layer = Dense(width, n_pars)
+    end
+
+
+    ψ = Chain(Dense(n_data, width, relu), [Dense(width, width, relu) for _ in 1:n_encoder]...)
+    ϕ = Chain([Dense(width, width, relu) for _ in 1:n_decoder]..., final_layer)
+    network = DeepSet(ψ, ϕ)
+    estimator = QuantileEstimator(network)
+
+    estimator = train(
+        estimator, 
+        sample_nbe, 
+        simulate_nbe, 
+        K = train_size,
+        m = m
+    )
+
+    if !isnothing(savepath) 
+        BSON.@save joinpath(savepath, estimator_mdl_str) estimator
+        return nothing
+    else
+        return estimator
+    end
+end
+
 function load_model(n_lists, width, n_hidden, train_size, censoring_lower, censoring_threshold, m, models_path)
     mdl_str = "model_$(n_lists)_$(width)_$(n_hidden)_$(train_size)_$(censoring_lower)_$(censoring_threshold)_$m.bson"
     if isfile(joinpath(models_path, mdl_str))
