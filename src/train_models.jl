@@ -118,7 +118,7 @@ outpath_path_ds = joinpath("output", "models_ds")
 mkpath(outpath_path_ds)
 
 grid_ds = collect(Base.product(
-    [6],
+    [5],
     [128, 256],
     [1, 2, 3],
     [1, 2, 3],
