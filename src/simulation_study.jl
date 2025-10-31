@@ -128,6 +128,7 @@ function intercept_APE_summary_ds(models_path, test_path)
             n_dencoder=n_decoder, 
             train_size=train_size, 
             censoring_threshold=censoring_threshold,
+            m = m,
             parameter = "intercept",
             intercept_truth = test_pars[1, :],
             intercept_estimated = estimated_pars[1, :],
