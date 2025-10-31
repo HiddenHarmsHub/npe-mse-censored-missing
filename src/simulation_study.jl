@@ -68,7 +68,7 @@ end
 test_summary_df = test_summary(models_path)
 CSV.write(joinpath("output", "test_summary.csv"), test_summary_df)
 
-function intercept_APE_summary(models_path)
+function intercept_APE_summary(models_path, test_path)
     model_files = filter(x -> !occursin("ci", x), readdir(models_path))
 
     output = []
@@ -101,5 +101,47 @@ function intercept_APE_summary(models_path)
     return vcat(output...)
 end
 
-intercept_ape_df = intercept_APE_summary(models_path)
+intercept_ape_df = intercept_APE_summary(models_path, test_path)
 CSV.write(joinpath("output", "intercept_ape_summary.csv"), intercept_ape_df)
+
+
+
+## also analyse the deepsets models
+
+function intercept_APE_summary_ds(models_path, test_path)
+    model_files = filter(x -> !occursin("ci", x), readdir(models_path))
+
+    output = []
+    for model_file in model_files
+        println("Evaluating model: $model_file")
+        n_lists, width, n_encoder, n_decoder, train_size, censoring_lower, censoring_threshold, m = parse.(Int, [m.match for m in eachmatch(r"\d+", model_file)])
+        model = load_model(model_file, models_path)
+        test_data, test_pars = load_test_data(test_path, n_lists, censoring_lower, censoring_threshold)
+        estimated_pars = hcat([model(hcat(x)) for x in eachcol(test_data)]...)
+
+        APE = abs.((estimated_pars .- test_pars) ./ test_pars)
+        push!(output, DataFrame(
+            dataset = 1:size(test_pars, 2),
+            n_lists=n_lists, 
+            width=width, 
+            n_encoder=n_encoder, 
+            n_dencoder=n_decoder, 
+            train_size=train_size, 
+            censoring_threshold=censoring_threshold,
+            parameter = "intercept",
+            intercept_truth = test_pars[1, :],
+            intercept_estimated = estimated_pars[1, :],
+            APE = vec(APE[1, :])
+        ))
+    end
+
+    return vcat(output...)
+end
+
+ds_models_path = joinpath("output", "models_ds")
+intercept_ape_df_ds = intercept_APE_summary_ds(ds_models_path, test_path)
+
+CSV.write(
+    joinpath("output", "intercept_ape_summary_ds.csv"), 
+    intercept_ape_df_ds
+)
