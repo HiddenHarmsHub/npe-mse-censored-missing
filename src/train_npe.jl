@@ -21,7 +21,6 @@ mkpath(output_path)
 
 overwrite_models = false
 if !overwrite_models
-    existing_models = readdir(output_path)
     grid_npe = filter(model -> !isfile(joinpath(output_path, "model_$(model[1])_$(model[2])_$(model[3])_$(model[4])_$(model[5])_$(model[6])_$(model[7])_$(model[8]).bson")), grid_npe)
 end
 
