@@ -398,4 +398,42 @@ function one_hot_encode_parameters(K::Int)
     return one_hot_matrix
 end
 
+function train_npe(n_lists, width, n_hidden, encoding_dim, train_size; m = 1, censoring_lower = 0, censoring_threshold = 0, savepath = nothing, intercept_dist = Uniform(1, 10))
+    estimator_mdl_str = "model_$(n_lists)_$(width)_$(n_hidden)_$(encoding_dim)_$(train_size)_$(censoring_lower)_$(censoring_threshold)_$(m).bson"
+    n_data = 2^n_lists - 1
+    n_pars = 1 + n_lists + binomial(n_lists, 2)  # intercept + betas + gammas
+    if censoring_threshold > 0
+        n_data *= 2  # Double the input size for censored data (U and W)
+    end
+
+    sample_nbe(n_reps) = hcat([sample_parameters(n_lists, intercept_dist = intercept_dist) for _ in 1:n_reps]...)
+    simulate_nbe(θ, m) = hcat([simulate_data(params, m, censoring_lower = censoring_lower, censoring_threshold = censoring_threshold) for params in eachcol(θ)]...)
+    
+    network = Chain(
+        Dense(n_data, width, relu),
+        [Dense(width, width, relu) for _ in 1:n_hidden]...,
+        Dense(width, encoding_dim)
+    )
+    
+    
+    
+    q = NormalisingFlow(n_pars, encoding_dim)
+    estimator = PosteriorEstimator(q, network)
+    
+    estimator = train(
+        estimator, 
+        sample_nbe, 
+        simulate_nbe, 
+        K = train_size,
+        m = m,
+        epochs = 200
+    )
+    
+    if !isnothing(savepath) 
+        BSON.@save joinpath(savepath, estimator_mdl_str) estimator
+        return nothing
+    else
+        return estimator
+    end
+end
 
