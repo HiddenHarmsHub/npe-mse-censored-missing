@@ -1,7 +1,8 @@
 include("mse_functions.jl")
+include("mcmc_functions.jl")
 
 ## First analyse the Silverman data
-silverman_data = Float32.(log.(load_silverman_data_6() .+ 1))
+#silverman_data = Float32.(log.(load_silverman_data_6() .+ 1))
 silverman_data = Float32.(log.(load_silverman_data() .+ 1))
 
 model_silverman = load_model_nbe(
@@ -32,10 +33,64 @@ silverman_dark_figure = exp(silverman_par_estimates[1])
 silverman_dark_figure_lower = exp(silverman_par_cis[1])
 silverman_dark_figure_upper = exp(silverman_par_cis[length(silverman_par_estimates) + 1])
 
+## Infer using NPE
+npe_models_path = joinpath("output", "models_npe")
+npe_model_silverman = load_model_npe(5, 256,3,10000,0, 0, 1, npe_models_path)
+
+posterior_samples_npe = sampleposterior(npe_model_silverman, reshape(silverman_data, :, 1), 1000)
+
+intercept_npe_median = median(posterior_samples_npe[1, :])
+
+## Try MCMC on Silverman data
+
+input_counts_silverman = load_silverman_data()
+X = one_hot_encode_parameters(5)
+
+intercept_dist = Uniform(1, 10)
+beta_dist = Normal(0, 4)
+gamma_dist = Normal(0, 1/5)
+
+censoring_lower = 0
+censoring_upper = 0
+
+m = mse_model_censored(input_counts_silverman, X, intercept_dist, beta_dist, gamma_dist, censoring_lower, censoring_upper)
+num_chains = 4
+n_iterations = 5000
+chains = sample(
+    m, 
+    NUTS(), 
+    MCMCSerial(), 
+    n_iterations, 
+    num_chains, 
+    progress = false,
+    parallel = false
+)
+
+chains_df = DataFrame(chains)
+
+median(chains_df.intercept)
+
+using StatsPlots
+
+npe_intercept_samples = vec(posterior_samples_npe[1, :])
+mcmc_intercept_samples = Vector(chains_df.intercept)
+
+p = density(npe_intercept_samples, label = "NPE", color = :steelblue)
+density!(p, mcmc_intercept_samples, label = "MCMC", color = :firebrick)
+vline!([silverman_par_estimates[1]], label = "NBE Estimate", linestyle = :dash, color = :black)
+xlabel!("Intercept")
+ylabel!("Density")
+title!("Posterior density: Intercept (Silverman)")
+display(p)
 
 
 
+#
+#
 ## Now analyse King data
+#
+#
+
 king_data = load_king_data()
 
 model_king = load_model_nbe(
@@ -69,7 +124,7 @@ king_dark_figure_upper = exp(king_par_cis[length(king_par_estimates) + 1])
 
 ## compare with mcmc
 
-include("mcmc_functions.jl")
+
 
 king_data_reduced = king_data[1:15]
 
