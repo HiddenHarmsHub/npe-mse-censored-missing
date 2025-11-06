@@ -119,11 +119,13 @@ grid_npe = vcat(grid_lists, grid_neurons, grid_censoring, grid_4, grid_5, grid_6
 output_path_npe = joinpath("output", "models_npe")
 mkpath(output_path_npe)
 
+encoding_dim = 128
+
 if !overwrite_models
-    grid_npe = filter(model -> !isfile(joinpath(output_path_npe, "model_$(model[1])_$(model[2])_$(model[3])_$(model[4])_$(model[5])_$(model[6])_$(model[7])_$(model[8]).bson")), grid_npe)
+    grid_npe = filter(model -> !isfile(joinpath(output_path_npe, "model_$(model[1])_$(model[2])_$(model[3])_$(encoding_dim)_$(model[4])_$(model[5])_$(model[6])_$(model[7]).bson")), grid_npe)
 end
 
-encoding_dim = 128
+
 
 pmap(
     model -> begin
