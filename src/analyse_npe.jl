@@ -29,11 +29,6 @@ output_df_list = pmap(
             posteriormedian(NPE_model, reshape(x, :, 1))[1]
         end
 
-        intercept_NBE = map(eachcol(test_data)) do x
-            NBE_model = BSON.load(joinpath("output", "models", "model_$(n_lists)_$(width)_$(n_hidden)_$(train_size)_$(censoring_lower)_$(censoring_threshold)_$(m).bson"))[:estimator]
-            NBE_model(reshape(x, :, 1))[1]
-        end
-
         return DataFrame(
             n_lists = n_lists,
             width = width,
