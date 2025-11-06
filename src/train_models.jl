@@ -96,14 +96,14 @@ println("Models to train after filtering: ", length(grid_nbe))
 pmap(
     model -> begin
         wid = myid()
-        println("Worker $wid running with parameters: list_size=$(model[1]), width=$(model[2]), n_hidden=$(model[3]), train_size=$(model[4]), censoring_lower=$(model[5]) censoring_threshold=$(model[6]), m=$(model[7])")
+        println("Worker $wid running with parameters: list_size=$(model[1]), width=$(model[2]), n_hidden=$(model[3]), train_size=$(model[4]), censoring_lower=$(model[5]) censoring_upper=$(model[6]), m=$(model[7])")
         train_model_mlp(
             model[1],
             model[2],
             model[3], 
             model[4], 
             censoring_lower = model[5],
-            censoring_threshold = model[6],
+            censoring_upper = model[6],
             m = model[7],
             savepath = output_path_nbe
         )
@@ -125,12 +125,10 @@ if !overwrite_models
     grid_npe = filter(model -> !isfile(joinpath(output_path_npe, "model_$(model[1])_$(model[2])_$(model[3])_$(encoding_dim)_$(model[4])_$(model[5])_$(model[6])_$(model[7]).bson")), grid_npe)
 end
 
-
-
 pmap(
     model -> begin
         wid = myid()
-        println("Worker $wid running with parameters: list_size=$(model[1]), width=$(model[2]), n_hidden=$(model[3]), train_size=$(model[4]), censoring_lower=$(model[5]) censoring_threshold=$(model[6]), m=$(model[7])")
+        println("Worker $wid running with parameters: list_size=$(model[1]), width=$(model[2]), n_hidden=$(model[3]), train_size=$(model[4]), censoring_lower=$(model[5]) censoring_upper=$(model[6]), m=$(model[7])")
         train_npe(
             model[1],
             model[2],
@@ -138,7 +136,7 @@ pmap(
             encoding_dim,
             model[4], 
             censoring_lower = model[5],
-            censoring_threshold = model[6],
+            censoring_upper = model[6],
             m = model[7],
             savepath = output_path_npe
         )

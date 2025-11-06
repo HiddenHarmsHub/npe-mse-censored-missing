@@ -1,6 +1,6 @@
 using Turing
 
-@model function mse_model_censored(y, X, intercept_dist, beta_dist, gamma_dist, censoring_lower, censoring_threshold)
+@model function mse_model_censored(y, X, intercept_dist, beta_dist, gamma_dist, censoring_lower, censoring_upper)
     n_pars = size(X, 2)
     K = Int(-0.5 + (sqrt(8 * (n_pars - 1) + 1) / 2))  # Solve for K given length of params
     intercept ~ intercept_dist
@@ -9,7 +9,36 @@ using Turing
     
     params = vcat(intercept, betas, gammas)
     
-    Turing.@addlogprob!(likelihood_censored(y, params, X, censoring_lower, censoring_threshold))
+    Turing.@addlogprob!(likelihood_censored(y, params, X, censoring_lower, censoring_upper))
+end
+
+@model function mse_model(y, X, intercept_dist, beta_dist, gamma_dist)
+    n_pars = size(X, 2)
+    K = Int(-0.5 + (sqrt(8 * (n_pars - 1) + 1) / 2))  # Solve for K given length of params
+    intercept ~ intercept_dist
+    betas ~ filldist(beta_dist, K)
+    gammas ~ filldist(gamma_dist, binomial(K, 2))
+    
+    params = vcat(intercept, betas, gammas)
+
+    for i in eachindex(y)
+        logλ = sum(X[i, :] .* params)
+        y[i] ~ Poisson(exp(logλ))
+    end
+end
+
+@model function mse_model_filtered(y, X, intercept_dist, beta_dist, gamma_dist, K, filter_indices)
+    n_pars = size(X, 2)
+    intercept ~ intercept_dist
+    betas ~ filldist(beta_dist, K)
+    gammas ~ filldist(gamma_dist, length(filter_indices) - K - 1)
+    
+    params = vcat(intercept, betas, gammas)
+
+    for i in eachindex(y)
+        logλ = sum(X[i, :] .* params)
+        y[i] ~ Poisson(exp(logλ))
+    end
 end
 
 function run_mcmc_test_slice(slice_idx, n_lists, test_data, test_pars; num_chains = 4, samples_path = nothing, summary_path = nothing, n_iterations = 5000)
@@ -29,9 +58,9 @@ function run_mcmc_test_slice(slice_idx, n_lists, test_data, test_pars; num_chain
     beta_dist = Normal(0, 4)
     gamma_dist = Normal(0, 1/5)
     censoring_lower = 1
-    censoring_threshold = 10
+    censoring_upper = 10
 
-    m = mse_model_censored(input_counts, X, intercept_dist, beta_dist, gamma_dist, censoring_lower, censoring_threshold)
+    m = mse_model_censored(input_counts, X, intercept_dist, beta_dist, gamma_dist, censoring_lower, censoring_upper)
     chains = sample(
         m, 
         NUTS(), 
@@ -67,13 +96,13 @@ function run_mcmc_test_slice(slice_idx, n_lists, test_data, test_pars; num_chain
     end
 end
 
-function likelihood_censored(counts::Vector{Int64}, pars::Vector, X::Matrix{Int64}, censoring_lower::Int, censoring_threshold::Int)
+function likelihood_censored(counts::Vector{Int64}, pars::Vector, X::Matrix{Int64}, censoring_lower::Int, censoring_upper::Int)
     rates = exp.(X * pars)
     ll = 0.0
     for (rate, count) in zip(rates, counts)
         if count == -1
-            # P(0 <= X <= censoring_threshold) = F(censoring_threshold; λ) - F(0; λ)
-            for k in censoring_lower:censoring_threshold
+            # P(0 <= X <= censoring_upper) = F(censoring_upper; λ) - F(0; λ)
+            for k in censoring_lower:censoring_upper
                 ll += k * log.(rate) .- rate 
             end
         else

@@ -14,14 +14,14 @@ output_df_list = pmap(
         encoding_dim = parse(Int, split(npe_model, "_")[5])
         train_size = parse(Int, split(npe_model, "_")[6])
         censoring_lower = parse(Int, split(npe_model, "_")[7])
-        censoring_threshold = parse(Int, split(npe_model, "_")[8])
+        censoring_upper = parse(Int, split(npe_model, "_")[8])
         m = parse(Int, split(split(npe_model, "_")[9], ".")[1])
 
         test_data, test_pars = load_test_data(
             joinpath("output", "test_data"), 
             n_lists, 
             censoring_lower, 
-            censoring_threshold
+            censoring_upper
         )
 
         NPE_model = BSON.load(joinpath("output", "models_npe", npe_model))[:estimator]
@@ -37,7 +37,7 @@ output_df_list = pmap(
             encoding_dim = encoding_dim,
             train_size = train_size,
             censoring_lower = censoring_lower,
-            censoring_threshold = censoring_threshold,
+            censoring_upper = censoring_upper,
             m = m,
             intercept_NPE = intercept_NPE,
             intercept_true = test_pars[1, :]

@@ -32,7 +32,7 @@ function rpois(logλ; logλ_max = 43.0)
     end
 end
 
-function simulate_data(pars, m; censoring_lower = 0, censoring_threshold = 0)
+function simulate_data(pars, m; censoring_lower = 0, censoring_upper = 0)
     K = Int(-0.5 + (sqrt(8 * length(pars) - 7) / 2))  # Solve for K given length of pars
     intercept = pars[1]
     betas = pars[2:1+K]
@@ -56,16 +56,16 @@ function simulate_data(pars, m; censoring_lower = 0, censoring_threshold = 0)
         end
     end
 
-    if censoring_threshold > 0
-        W = 1 * (censoring_lower .<= Z .<= censoring_threshold)
-        U = ifelse.(censoring_lower .<= Z .<= censoring_threshold, -1.0, log.(Z .+ 1))
+    if censoring_upper > 0
+        W = 1 * (censoring_lower .<= Z .<= censoring_upper)
+        U = ifelse.(censoring_lower .<= Z .<= censoring_upper, -1.0, log.(Z .+ 1))
         return Float32.(vcat(U, W))
     end
 
     return Float32.(log.(Z .+ 1))  # Log-transform the counts
 end
 
-function simulate_data_filtered(pars, m; censoring_lower = 0, censoring_threshold = 0, K = nothing, filter_terms = nothing)
+function simulate_data_filtered(pars, m; censoring_lower = 0, censoring_upper = 0, K = nothing, filter_terms = nothing)
     isnothing(K) && error("K must be provided for filtered data simulation.")
         
     intercept = pars[1]
@@ -95,9 +95,9 @@ function simulate_data_filtered(pars, m; censoring_lower = 0, censoring_threshol
         end
     end
 
-    if censoring_threshold > 0
-        W = 1 * (censoring_lower .<= Z .<= censoring_threshold)
-        U = ifelse.(censoring_lower .<= Z .<= censoring_threshold, -1.0, log.(Z .+ 1))
+    if censoring_upper > 0
+        W = 1 * (censoring_lower .<= Z .<= censoring_upper)
+        U = ifelse.(censoring_lower .<= Z .<= censoring_upper, -1.0, log.(Z .+ 1))
         return Float32.(vcat(U, W))
     end
 
@@ -176,15 +176,15 @@ function construct_MLP_c(width::Int, n_hidden::Int, n_lists::Int, intercept_supp
     )
 end
 
-function train_model_mlp(n_lists, width, n_hidden, train_size; m = 1, censoring_lower = 0, censoring_threshold = 0, savepath = nothing, intercept_dist = Uniform(1, 10))
-    estimator_mdl_str = "model_$(n_lists)_$(width)_$(n_hidden)_$(train_size)_$(censoring_lower)_$(censoring_threshold)_$(m).bson"
-    ci_mdl_str = "model_ci_$(n_lists)_$(width)_$(n_hidden)_$(train_size)_$(censoring_lower)_$(censoring_threshold)_$(m).bson"
+function train_model_mlp(n_lists, width, n_hidden, train_size; m = 1, censoring_lower = 0, censoring_upper = 0, savepath = nothing, intercept_dist = Uniform(1, 10))
+    estimator_mdl_str = "model_$(n_lists)_$(width)_$(n_hidden)_$(train_size)_$(censoring_lower)_$(censoring_upper)_$(m).bson"
+    ci_mdl_str = "model_ci_$(n_lists)_$(width)_$(n_hidden)_$(train_size)_$(censoring_lower)_$(censoring_upper)_$(m).bson"
 
     intercept_support = ifelse(typeof(intercept_dist) <: Uniform, params(intercept_dist), nothing)
 
     sample_nbe(n_reps) = hcat([sample_parameters(n_lists, intercept_dist = intercept_dist) for _ in 1:n_reps]...)
-    simulate_nbe(θ, m) = hcat([simulate_data(params, m, censoring_lower = censoring_lower, censoring_threshold = censoring_threshold) for params in eachcol(θ)]...)
-    network = construct_MLP(width, n_hidden, n_lists, censoring_threshold > 0, intercept_support)
+    simulate_nbe(θ, m) = hcat([simulate_data(params, m, censoring_lower = censoring_lower, censoring_upper = censoring_upper) for params in eachcol(θ)]...)
+    network = construct_MLP(width, n_hidden, n_lists, censoring_upper > 0, intercept_support)
     estimator = PointEstimator(network)
 
     ci_estimator = IntervalEstimator(network)
@@ -214,19 +214,19 @@ function train_model_mlp(n_lists, width, n_hidden, train_size; m = 1, censoring_
     end
 end
 
-function train_model_ds(n_lists, width, n_encoder, n_decoder, train_size; m = 1, censoring_lower = 0, censoring_threshold = 0, savepath = nothing, intercept_dist = Uniform(1, 10))
-    estimator_mdl_str = "model_$(n_lists)_$(width)_$(n_encoder)_$(n_decoder)_$(train_size)_$(censoring_lower)_$(censoring_threshold)_$(m).bson"
+function train_model_ds(n_lists, width, n_encoder, n_decoder, train_size; m = 1, censoring_lower = 0, censoring_upper = 0, savepath = nothing, intercept_dist = Uniform(1, 10))
+    estimator_mdl_str = "model_$(n_lists)_$(width)_$(n_encoder)_$(n_decoder)_$(train_size)_$(censoring_lower)_$(censoring_upper)_$(m).bson"
 
     n_data = 2^n_lists - 1
     n_pars = 1 + n_lists + binomial(n_lists, 2)  # intercept + betas + gammas
-    if censoring_threshold > 0
+    if censoring_upper > 0
         n_data *= 2  # Double the input size for censored data (U and W)
     end
 
     intercept_support = ifelse(typeof(intercept_dist) <: Uniform, params(intercept_dist), nothing)
 
     sample_nbe(n_reps) = hcat([sample_parameters(n_lists, intercept_dist = intercept_dist) for _ in 1:n_reps]...)
-    simulate_nbe(θ, m) = [simulate_data(params, m, censoring_lower = censoring_lower, censoring_threshold = censoring_threshold) for params in eachcol(θ)]
+    simulate_nbe(θ, m) = [simulate_data(params, m, censoring_lower = censoring_lower, censoring_upper = censoring_upper) for params in eachcol(θ)]
 
     if !isnothing(intercept_support)
         a, b = Float32(intercept_support[1]), Float32(intercept_support[2])
@@ -261,8 +261,8 @@ function train_model_ds(n_lists, width, n_encoder, n_decoder, train_size; m = 1,
     end
 end
 
-function load_model(n_lists, width, n_hidden, train_size, censoring_lower, censoring_threshold, m, models_path)
-    mdl_str = "model_$(n_lists)_$(width)_$(n_hidden)_$(train_size)_$(censoring_lower)_$(censoring_threshold)_$m.bson"
+function load_model_nbe(n_lists, width, n_hidden, train_size, censoring_lower, censoring_upper, m, models_path)
+    mdl_str = "model_$(n_lists)_$(width)_$(n_hidden)_$(train_size)_$(censoring_lower)_$(censoring_upper)_$m.bson"
     if isfile(joinpath(models_path, mdl_str))
         model = BSON.load(joinpath(models_path, mdl_str))
         return model[:estimator]
@@ -271,11 +271,21 @@ function load_model(n_lists, width, n_hidden, train_size, censoring_lower, censo
     end
 end
 
-function load_model(n_lists, width, n_hidden, train_size, censoring_lower, censoring_threshold, m, models_path, ci::Bool)
-    if !ci
-        load_model(n_lists, width, n_hidden, train_size, censoring_lower, censoring_threshold, m, models_path)
+function load_model_npe(n_lists, width, n_hidden, train_size, censoring_lower, censoring_upper, m, models_path; encoding_dim = 128)
+    mdl_str = "model_$(n_lists)_$(width)_$(n_hidden)_$(encoding_dim)_$(train_size)_$(censoring_lower)_$(censoring_upper)_$m.bson"
+    if isfile(joinpath(models_path, mdl_str))
+        model = BSON.load(joinpath(models_path, mdl_str))
+        return model[:estimator]
     else
-        mdl_str = "model_ci_$(n_lists)_$(width)_$(n_hidden)_$(train_size)_$(censoring_lower)_$(censoring_threshold)_$m.bson"
+        error("Model file $(mdl_str) not found in $(models_path).")
+    end
+end
+
+function load_model_nbe(n_lists, width, n_hidden, train_size, censoring_lower, censoring_upper, m, models_path, ci::Bool)
+    if !ci
+        load_model_nbe(n_lists, width, n_hidden, train_size, censoring_lower, censoring_upper, m, models_path)
+    else
+        mdl_str = "model_ci_$(n_lists)_$(width)_$(n_hidden)_$(train_size)_$(censoring_lower)_$(censoring_upper)_$m.bson"
         if isfile(joinpath(models_path, mdl_str))
             model = BSON.load(joinpath(models_path, mdl_str))
             return model[:ci_estimator]
@@ -285,7 +295,7 @@ function load_model(n_lists, width, n_hidden, train_size, censoring_lower, censo
     end 
 end
 
-function load_model(mdl_str, models_path)
+function load_model_nbe(mdl_str, models_path)
     if isfile(joinpath(models_path, mdl_str))
         model = BSON.load(joinpath(models_path, mdl_str))
         if occursin("ci_", mdl_str)
@@ -297,29 +307,27 @@ function load_model(mdl_str, models_path)
     end
 end
 
-function load_model(; 
+function load_model_nbe(; 
     n_lists, 
     width, 
     n_hidden, 
     train_size, 
     censoring_lower,
-    censoring_threshold,
+    censoring_upper,
     m,
     ci = false, 
     models_path = joinpath("output", "models")
 )
-    load_model(n_lists, width, n_hidden, train_size, censoring_lower, censoring_threshold, m, models_path, ci)
+    load_model_nbe(n_lists, width, n_hidden, train_size, censoring_lower, censoring_upper, m, models_path, ci)
 end
 
 
-
-
-function load_test_data(test_path, list_size, censoring_lower = 0, censoring_threshold = 0)
+function load_test_data(test_path, list_size, censoring_lower = 0, censoring_upper = 0)
     test_data = BSON.load(joinpath(test_path, "test_data_$list_size.bson"))
-    if censoring_threshold > 0
+    if censoring_upper > 0
         Z_test = test_data[:Z_test]
-        W = 1 * (log(censoring_lower + 1) .<= Z_test .<= log(censoring_threshold + 1))
-        U = ifelse.(log(censoring_lower + 1) .<= Z_test .<= log(censoring_threshold + 1), -1.0, Z_test)
+        W = 1 * (log(censoring_lower + 1) .<= Z_test .<= log(censoring_upper + 1))
+        U = ifelse.(log(censoring_lower + 1) .<= Z_test .<= log(censoring_upper + 1), -1.0, Z_test)
         return Float32.(vcat(U, W)), test_data[:params]
     end
     return test_data[:Z_test], test_data[:params]
@@ -398,16 +406,16 @@ function one_hot_encode_parameters(K::Int)
     return one_hot_matrix
 end
 
-function train_npe(n_lists, width, n_hidden, encoding_dim, train_size; m = 1, censoring_lower = 0, censoring_threshold = 0, savepath = nothing, intercept_dist = Uniform(1, 10))
-    estimator_mdl_str = "model_$(n_lists)_$(width)_$(n_hidden)_$(encoding_dim)_$(train_size)_$(censoring_lower)_$(censoring_threshold)_$(m).bson"
+function train_npe(n_lists, width, n_hidden, encoding_dim, train_size; m = 1, censoring_lower = 0, censoring_upper = 0, savepath = nothing, intercept_dist = Uniform(1, 10))
+    estimator_mdl_str = "model_$(n_lists)_$(width)_$(n_hidden)_$(encoding_dim)_$(train_size)_$(censoring_lower)_$(censoring_upper)_$(m).bson"
     n_data = 2^n_lists - 1
     n_pars = 1 + n_lists + binomial(n_lists, 2)  # intercept + betas + gammas
-    if censoring_threshold > 0
+    if censoring_upper > 0
         n_data *= 2  # Double the input size for censored data (U and W)
     end
 
     sample_nbe(n_reps) = hcat([sample_parameters(n_lists, intercept_dist = intercept_dist) for _ in 1:n_reps]...)
-    simulate_nbe(θ, m) = hcat([simulate_data(params, m, censoring_lower = censoring_lower, censoring_threshold = censoring_threshold) for params in eachcol(θ)]...)
+    simulate_nbe(θ, m) = hcat([simulate_data(params, m, censoring_lower = censoring_lower, censoring_upper = censoring_upper) for params in eachcol(θ)]...)
     
     network = Chain(
         Dense(n_data, width, relu),

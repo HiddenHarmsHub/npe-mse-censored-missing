@@ -9,7 +9,7 @@ width_plot <- ape_df %>%
     filter(
         n_lists == 5, 
         train_size == train_size_fixed,
-        censoring_threshold == 10,
+        censoring_upper == 10,
         n_hidden == 2
     ) %>% 
     ggplot(aes(x = as.factor(width), y = log(APE))) +
@@ -29,7 +29,7 @@ censoring_plot <- ape_df %>%
         train_size == train_size_fixed,
         width == 256
     ) %>% 
-    ggplot(aes(x = as.factor(censoring_threshold), y = log(APE))) +
+    ggplot(aes(x = as.factor(censoring_upper), y = log(APE))) +
     geom_boxplot(fill = "#2c7bb6", alpha = 0.6) +
     theme_minimal(base_size = 14) +
     labs(x = "Censoring Threshold", y = "log APE")
@@ -42,7 +42,7 @@ ggsave(
 ## number of lists sensitivity
 n_lists_plot <- ape_df %>% 
     filter(
-        censoring_threshold == 10, 
+        censoring_upper == 10, 
         train_size == train_size_fixed,
         width == 256,
         n_hidden == 3
@@ -62,7 +62,7 @@ hidden_layers_plot <- ape_df %>%
     filter(
         n_lists == 5, 
         train_size == train_size_fixed,
-        censoring_threshold == 10,
+        censoring_upper == 10,
         width == 256
     ) %>% 
     ggplot(aes(x = as.factor(n_hidden), y = log(APE))) +
@@ -80,7 +80,7 @@ intercept_sensitivity <- ape_df %>%
     filter(
         n_lists == 5, 
         train_size == train_size_fixed,
-        censoring_threshold == 10,
+        censoring_upper == 10,
         width == 256,
         n_hidden == 3
     ) %>%
@@ -112,15 +112,15 @@ censoring_summary_table <- ape_df %>%
         width == 256,
         n_hidden == 3
     ) %>% 
-    group_by(censoring_threshold) %>% 
+    group_by(censoring_upper) %>% 
     summarise(
         `1st Qu.` = quantile(APE, 0.75),
         Median = median(APE),
         Mean = mean(APE),
         `3rd Qu.` = quantile(APE, 0.25)
     ) %>%
-    pivot_longer(-censoring_threshold, names_to = "Statistic", values_to = "Value") %>%
-    pivot_wider(names_from = censoring_threshold, values_from = Value)
+    pivot_longer(-censoring_upper, names_to = "Statistic", values_to = "Value") %>%
+    pivot_wider(names_from = censoring_upper, values_from = Value)
 
 ## Print for latex
 censoring_summary_table %>%
@@ -173,7 +173,7 @@ reduced_ape_df <- ape_df %>%
     filter( 
         n_lists == 5, 
         train_size == train_size_fixed,
-        censoring_threshold == 10,
+        censoring_upper == 10,
         width == 256,
         n_hidden == 3
     ) %>% 
@@ -260,3 +260,48 @@ ggsave(
     plot = convergence_comparison, width = 7, height = 5, dpi = 300
 )
 
+
+## now the deepsets plots
+
+ape_ds_df <- read_csv(file.path("output", "intercept_ape_summary_ds.csv"))
+
+ape_ds_df %>%
+    ggplot(aes(x = as.factor(m))) +
+    geom_boxplot(aes(fill = as.factor(width), y = log(APE)), alpha = 0.6) +
+    theme_minimal(base_size = 14) +
+    labs(x = "Number of Lists", y = "log APE") +
+    theme(legend.position = "top") +
+    facet_wrap(n_encoder ~ n_dencoder)
+
+
+ape_ds_df %>%
+    group_by(m, width, n_encoder, n_dencoder) %>%
+    summarise(
+        `1st Qu.` = quantile(APE, 0.25),
+        Median = median(APE),
+        Mean = mean(APE),
+        `3rd Qu.` = quantile(APE, 0.75)
+    ) %>%
+    pivot_longer(-c(m, width, n_encoder, n_dencoder), names_to = "Statistic", values_to = "Value") %>%
+    pivot_wider(names_from = m, values_from = Value) %>%
+    arrange(width, n_encoder, n_dencoder, Statistic) %>%
+    View()
+
+
+ape_ds_df %>%
+    mutate(mdl = paste0("m=", m, ", w=", width, ", enc=", n_encoder, ", dec=", n_dencoder)) %>%
+    ggplot() +
+    geom_line(aes(x = as.factor(m), y = log(APE), group = mdl, color = mdl), alpha = 0.6) +
+    theme_minimal(base_size = 14)
+
+
+ape_ds_df %>%
+        group_by(m, width, n_encoder, n_dencoder) %>%
+    summarise(
+        `1st Qu.` = quantile(APE, 0.25),
+        Median = median(APE),
+        Mean = mean(APE),
+        `3rd Qu.` = quantile(APE, 0.75)
+    ) %>%
+    ggplot(aes(x = as.factor(m), y = log(Median), group = interaction(width, n_encoder, n_dencoder), color = interaction(width, n_encoder, n_dencoder))) +
+    geom_line()
