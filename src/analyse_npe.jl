@@ -24,8 +24,8 @@ output_df_list = pmap(
             censoring_threshold
         )
 
+        NPE_model = BSON.load(joinpath("output", "models_npe", npe_model))[:estimator]
         intercept_NPE = map(eachcol(test_data)) do x
-            NPE_model = BSON.load(joinpath("output", "models_npe", npe_model))[:estimator]
             posteriormedian(NPE_model, reshape(x, :, 1))[1]
         end
 
@@ -47,3 +47,5 @@ output_df_list = pmap(
 
 output_df = vcat(output_df_list...)
 CSV.write("output/npe_vs_nbe_intercept_estimates.csv", output_df)
+
+
