@@ -4,7 +4,7 @@ addprocs(SlurmManager(); exeflags=["--threads", "1", "--project"])
 
 @everywhere include("mse_functions.jl")
 
-function train_npe(n_lists, width, n_hidden, encoding_dim, train_size; m = 1, censoring_lower = 0, censoring_threshold = 0, savepath = nothing, intercept_dist = Uniform(1, 10))
+@everywhere function train_npe(n_lists, width, n_hidden, encoding_dim, train_size; m = 1, censoring_lower = 0, censoring_threshold = 0, savepath = nothing, intercept_dist = Uniform(1, 10))
     estimator_mdl_str = "model_$(n_lists)_$(width)_$(n_hidden)_$(encoding_dim)_$(train_size)_$(censoring_lower)_$(censoring_threshold)_$(m).bson"
     n_data = 2^n_lists - 1
     n_pars = 1 + n_lists + binomial(n_lists, 2)  # intercept + betas + gammas
@@ -56,8 +56,6 @@ grid_npe = collect(Base.product(
     [1]
 ))[:]
 
-grid_npe = grid_npe[1:5]
-
 output_path = joinpath("output", "models_npe")
 mkpath(output_path)
 
@@ -71,9 +69,9 @@ pmap(
             model[3], 
             model[4],
             model[5], 
-            censoring_lower = model[5],
-            censoring_threshold = model[6],
-            m = model[7],
+            censoring_lower = model[6],
+            censoring_threshold = model[7],
+            m = model[8],
             savepath = output_path
         )
     end,
