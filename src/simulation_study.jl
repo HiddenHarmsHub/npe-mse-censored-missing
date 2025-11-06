@@ -94,55 +94,7 @@ intercept_summaries = pmap(
     model_files
 )
 
-CSV.write(joinpath("output", "intercept_estimate_comparison.csv"), vcat(intercept_summaries...))
-
-
-## Now provide a summary of the test results for each model
-function test_summary(models_path)
-    model_files = filter(x -> !occursin("ci", x), readdir(models_path))
-
-    output = []
-    for model_file in model_files
-        n_lists, width, n_hidden, train_size, censoring_lower, censoring_upper, m = parse.(Int, [m.match for m in eachmatch(r"\d+", model_file)])
-        println("Evaluating model: $model_file")
-        model = load_model_nbe(model_file, models_path)
-        test_data, test_pars = load_test_data(test_path, n_lists, censoring_lower, censoring_upper)
-        estimated_pars = model(test_data)
-        push!(output, DataFrame(
-            n_lists=n_lists, 
-            width=width, 
-            n_hidden=n_hidden, 
-            train_size=train_size,
-            censoring_lower=censoring_lower, 
-            censoring_upper=censoring_upper,
-            parameter = get_param_names(n_lists),
-            bias = vec(mean(estimated_pars .- test_pars, dims=2)), 
-            mse = vec(mean((estimated_pars .- test_pars).^2, dims=2)), 
-            mae = vec(mean(abs.(estimated_pars .- test_pars), dims=2)), 
-            rmse = vec(sqrt.(mean((estimated_pars .- test_pars).^2, dims=2))), 
-            mape = vec(mean(abs.((estimated_pars .- test_pars) ./ test_pars), dims=2))
-        ))
-    end
-
-    return vcat(output...)
-end
-
-test_summary_df = test_summary(models_path)
-CSV.write(joinpath("output", "test_summary.csv"), test_summary_df)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-model_file = "model_5_256_3_10000_0_0_1.bson"
-
+CSV.write(
+    joinpath("output", "intercept_estimate_comparison.csv"), 
+    vcat(intercept_summaries...)
+)
