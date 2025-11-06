@@ -30,6 +30,7 @@ output_df_list = pmap(
         end
 
         return DataFrame(
+            dataset = 1:size(test_pars, 2),
             n_lists = n_lists,
             width = width,
             n_hidden = n_hidden,
