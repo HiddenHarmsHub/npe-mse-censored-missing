@@ -17,10 +17,6 @@ test_data, test_pars = load_test_data(
 
 npe_models = readdir(joinpath("output", "models_npe"))
 
-test_data = test_data[:, 1:5]
-test_pars = test_pars[:, 1:5]
-
-
 output_df_list = map(
     npe_model -> begin
         n_lists = parse(Int, split(npe_model, "_")[2])
