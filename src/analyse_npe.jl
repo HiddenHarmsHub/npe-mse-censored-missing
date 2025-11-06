@@ -39,7 +39,6 @@ output_df_list = pmap(
             censoring_threshold = censoring_threshold,
             m = m,
             intercept_NPE = intercept_NPE,
-            intercept_NBE = intercept_NBE,
             intercept_true = test_pars[1, :]
         )
     end,
