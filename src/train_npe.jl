@@ -4,6 +4,18 @@ addprocs(SlurmManager(); exeflags=["--threads", "1", "--project"])
 
 @everywhere include("mse_functions.jl")
 
+
+n_lists = 5
+width = 128
+n_hidden = 3
+encoding_dim = 32
+train_size = 10000
+censoring_lower = 0
+censoring_threshold = 10
+m = 1
+train_npe(n_lists, width, n_hidden, encoding_dim, train_size)
+
+
 @everywhere function train_npe(n_lists, width, n_hidden, encoding_dim, train_size; m = 1, censoring_lower = 0, censoring_threshold = 0, savepath = nothing, intercept_dist = Uniform(1, 10))
     estimator_mdl_str = "model_$(n_lists)_$(width)_$(n_hidden)_$(encoding_dim)_$(train_size)_$(censoring_lower)_$(censoring_threshold)_$(m).bson"
     n_data = 2^n_lists - 1
@@ -23,7 +35,7 @@ addprocs(SlurmManager(); exeflags=["--threads", "1", "--project"])
     
     
     
-    q = NormalisingFlow(encoding_dim, encoding_dim)
+    q = NormalisingFlow(n_pars, encoding_dim)
     estimator = PosteriorEstimator(q, network)
     
     estimator = train(
