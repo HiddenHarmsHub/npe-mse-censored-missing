@@ -31,7 +31,8 @@ addprocs(SlurmManager(); exeflags=["--threads", "1", "--project"])
         sample_nbe, 
         simulate_nbe, 
         K = train_size,
-        m = m
+        m = m,
+        epochs = 200
     )
     
     if !isnothing(savepath) 
