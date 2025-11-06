@@ -316,7 +316,7 @@ function load_model_nbe(;
     censoring_upper,
     m,
     ci = false, 
-    models_path = joinpath("output", "models")
+    models_path = joinpath("output", "models_nbe")
 )
     load_model_nbe(n_lists, width, n_hidden, train_size, censoring_lower, censoring_upper, m, models_path, ci)
 end
