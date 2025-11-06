@@ -12,7 +12,6 @@ addprocs(SlurmManager(); exeflags=["--threads", "1", "--project"])
         n_data *= 2  # Double the input size for censored data (U and W)
     end
 
-    
     sample_nbe(n_reps) = hcat([sample_parameters(n_lists, intercept_dist = intercept_dist) for _ in 1:n_reps]...)
     simulate_nbe(θ, m) = hcat([simulate_data(params, m, censoring_lower = censoring_lower, censoring_threshold = censoring_threshold) for params in eachcol(θ)]...)
     
@@ -24,7 +23,7 @@ addprocs(SlurmManager(); exeflags=["--threads", "1", "--project"])
     
     
     
-    q = NormalisingFlow(n_pars, n_pars)
+    q = NormalisingFlow(encoding_dim, encoding_dim)
     estimator = PosteriorEstimator(q, network)
     
     estimator = train(
@@ -51,7 +50,7 @@ grid_npe = collect(Base.product(
     [8, 16, 32, 64, 128],
     [10000],
     [0],
-    [0],
+    [10],
     [1]
 ))[:]
 
