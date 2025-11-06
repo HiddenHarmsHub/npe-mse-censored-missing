@@ -18,7 +18,7 @@ addprocs(SlurmManager(); exeflags=["--threads", "1", "--project"])
     network = Chain(
         Dense(n_data, width, relu),
         [Dense(width, width, relu) for _ in 1:n_hidden]...,
-        Dense(width, n_pars)
+        Dense(width, encoding_dim)
     )
     
     
