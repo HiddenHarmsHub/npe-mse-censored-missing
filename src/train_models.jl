@@ -75,22 +75,22 @@ grid_6 = collect(Base.product(
     [1]
 ))[:]
 
-output_path = joinpath("output", "models")
-mkpath(output_path)
+output_path_nbe = joinpath("output", "models_nbe")
+mkpath(output_path_nbe)
 
-grid = vcat(grid_lists, grid_neurons, grid_censoring, grid_4, grid_5, grid_6)
+grid_nbe = vcat(grid_lists, grid_neurons, grid_censoring, grid_4, grid_5, grid_6)
 
-println("Total models to train: ", length(grid))
+println("Total models to train: ", length(grid_nbe))
 
-grid = sort(grid, by = x -> x[4]) ## ensure lower training sizes are done first
-grid = filter(model -> model[5] <= model[6], grid)
+grid_nbe = sort(grid_nbe, by = x -> x[4]) ## ensure lower training sizes are done first
+grid_nbe = filter(model -> model[5] <= model[6], grid_nbe)
 
 overwrite_models = false
 if !overwrite_models
-    grid = filter(model -> !isfile(joinpath(output_path, "model_$(model[1])_$(model[2])_$(model[3])_$(model[4])_$(model[5])_$(model[6])_$(model[7]).bson")), grid)
+    grid_nbe = filter(model -> !isfile(joinpath(output_path_nbe, "model_$(model[1])_$(model[2])_$(model[3])_$(model[4])_$(model[5])_$(model[6])_$(model[7]).bson")), grid_nbe)
 end
 
-println("Models to train after filtering: ", length(grid))
+println("Models to train after filtering: ", length(grid_nbe))
 
 ## First train regular models
 pmap(
@@ -105,51 +105,41 @@ pmap(
             censoring_lower = model[5],
             censoring_threshold = model[6],
             m = model[7],
-            savepath = output_path
+            savepath = output_path_nbe
         )
     end,
-    grid
+    grid_nbe
 )
 
-println("Finished training regular models. Now training deepset models...")
+println("Finished training regular models. Now training NPE models...")
 
-## Then train deepset models
-outpath_path_ds = joinpath("output", "models_ds")
-mkpath(outpath_path_ds)
+## Now train NPE models
+grid_npe = vcat(grid_lists, grid_neurons, grid_censoring, grid_4, grid_5, grid_6)
 
-grid_ds = collect(Base.product(
-    [5],
-    [128, 256],
-    [1, 2, 3],
-    [1, 2, 3],
-    [10000],
-    [0],
-    [10],
-    [1, 5, 10, 25, 50]
-))[:]
+output_path_npe = joinpath("output", "models_npe")
+mkpath(output_path_npe)
 
 if !overwrite_models
-    grid_ds = filter(model -> !isfile(joinpath(outpath_path_ds, "model_$(model[1])_$(model[2])_$(model[3])_$(model[4])_$(model[5])_$(model[6])_$(model[7])_$(model[8]).bson")), grid_ds)
+    grid_npe = filter(model -> !isfile(joinpath(output_path_npe, "model_$(model[1])_$(model[2])_$(model[3])_$(model[4])_$(model[5])_$(model[6])_$(model[7])_$(model[8]).bson")), grid_npe)
 end
+
+encoding_dim = 128
 
 pmap(
     model -> begin
         wid = myid()
-        println("Worker $wid running with parameters: list_size=$(model[1]), width=$(model[2]), n_encoder=$(model[3]), n_decoder=$(model[4]), train_size=$(model[5]), censoring_lower=$(model[6]) censoring_threshold=$(model[7]), m=$(model[8])")
-        train_model_ds(
+        println("Worker $wid running with parameters: list_size=$(model[1]), width=$(model[2]), n_hidden=$(model[3]), train_size=$(model[4]), censoring_lower=$(model[5]) censoring_threshold=$(model[6]), m=$(model[7])")
+        train_npe(
             model[1],
             model[2],
             model[3], 
-            model[4],
-            model[5], 
-            censoring_lower = model[6],
-            censoring_threshold = model[7],
-            m = model[8],
-            savepath = outpath_path_ds
+            encoding_dim,
+            model[4], 
+            censoring_lower = model[5],
+            censoring_threshold = model[6],
+            m = model[7],
+            savepath = output_path_npe
         )
     end,
-    grid_ds
+    grid_npe
 )
-
-
-
