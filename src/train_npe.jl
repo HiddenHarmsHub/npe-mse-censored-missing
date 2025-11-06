@@ -37,7 +37,6 @@ addprocs(SlurmManager(); exeflags=["--threads", "1", "--project"])
     
     if !isnothing(savepath) 
         BSON.@save joinpath(savepath, estimator_mdl_str) estimator
-        BSON.@save joinpath(savepath, ci_mdl_str) ci_estimator
         return nothing
     else
         return estimator
