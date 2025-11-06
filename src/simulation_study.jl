@@ -52,10 +52,6 @@ CSV.write(joinpath("output", "test_data_K5.csv"), DataFrame(test_data, :auto))
     estimated_nbe_cis = model_nbe_cis(test_data)
 
     model_npe = load_model_npe(n_lists, width, n_hidden, train_size, censoring_lower, censoring_upper, m, npe_models_path)
-    estimated_intercept_npe = map(eachcol(test_data)) do x
-        posteriormedian(model_npe, reshape(x, :, 1))[1]
-    end
-
     npe_estimates = map(eachcol(test_data)) do x
         posteriorquantile(model_npe, reshape(x, :, 1), [0.025, 0.5, 0.975])[1, :]
     end |> x -> hcat(x...)
