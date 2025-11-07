@@ -11,7 +11,7 @@ println("Worker IDs: ", workers())
 
 ## Number of lists
 grid_lists = collect(Base.product(
-    [3, 4, 5, 6, 10, 15],
+    [3, 4, 5, 6, 10],
     [256], 
     [3], 
     [10000],
@@ -25,6 +25,16 @@ grid_neurons = collect(Base.product(
     [5],
     [8, 16, 32, 64, 128, 256],
     [3],
+    [10000],
+    [0],
+    [10],
+    [1]
+))[:]
+
+grid_hidden = collect(Base.product(
+    [5],
+    [256],
+    [1, 2, 3, 4, 5],
     [10000],
     [0],
     [10],
@@ -53,7 +63,7 @@ grid_4 = collect(Base.product(
     [1]
 ))[:]
 
-## Test various architectures for 5 lists
+## Test various architectures for 5 lists, no censoring
 grid_5 = collect(Base.product(
     [5],
     [8, 16, 32, 64, 128, 256],
@@ -64,7 +74,7 @@ grid_5 = collect(Base.product(
     [1]
 ))[:]
 
-## Test various architectures for 6 lists
+## Test various architectures for 6 lists, no censoring
 grid_6 = collect(Base.product(
     [6],
     [8, 16, 32, 64, 128, 256],
@@ -78,7 +88,7 @@ grid_6 = collect(Base.product(
 output_path_nbe = joinpath("output", "models_nbe")
 mkpath(output_path_nbe)
 
-grid_nbe = unique(vcat(grid_lists, grid_neurons, grid_censoring, grid_4, grid_5, grid_6))
+grid_nbe = unique(vcat(grid_lists, grid_neurons, grid_censoring, grid_hidden, grid_4, grid_5, grid_6))
 
 println("Total models to train: ", length(grid_nbe))
 
@@ -114,7 +124,7 @@ pmap(
 println("Finished training regular models. Now training NPE models...")
 
 ## Now train NPE models
-grid_npe = unique(vcat(grid_lists, grid_neurons, grid_censoring, grid_4, grid_5, grid_6))
+grid_npe = unique(vcat(grid_lists, grid_neurons, grid_censoring, grid_hidden, grid_4, grid_5, grid_6))
 
 output_path_npe = joinpath("output", "models_npe")
 mkpath(output_path_npe)
