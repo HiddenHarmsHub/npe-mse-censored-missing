@@ -3,7 +3,10 @@ output/architectures/
 output/architectures_censored/
 output/architectures*/
 output/models/
+output/models*/
+output/models_*/
 src/old/
 output/test_data/
 output/mcmc_samples/
 output/mcmc_summary/
+slurm_output/
