@@ -39,7 +39,7 @@ test_data, test_pars = load_test_data(test_path, 5, 0, 10)
 CSV.write(joinpath("output", "test_data_K5.csv"), DataFrame(test_data, :auto))
 
 
-@everywhere function model_intecept_summary(model_file, nbe_models_path, npe_models_path, test_path)
+@everywhere function model_intecept_summary(model_file, nbe_models_path, npe_models_path, test_path, savepath)
     n_lists, width, n_hidden, train_size, censoring_lower, censoring_upper, m = parse.(Int, [m.match for m in eachmatch(r"\d+", model_file)])
 
     test_data, test_pars = load_test_data(test_path, n_lists, censoring_lower, censoring_upper)
@@ -59,7 +59,7 @@ CSV.write(joinpath("output", "test_data_K5.csv"), DataFrame(test_data, :auto))
 
     APE_NBE = abs.((estimated_pars_nbe .- test_pars) ./ test_pars)
     APE_NPE = abs.((npe_estimates[2, :] .- test_pars[1, :]) ./ test_pars[1, :])
-    return DataFrame(
+    out = DataFrame(
         dataset = 1:size(test_pars, 2),
         n_lists=n_lists, 
         width=width, 
@@ -77,20 +77,22 @@ CSV.write(joinpath("output", "test_data_K5.csv"), DataFrame(test_data, :auto))
         APE_NBE = vec(APE_NBE[1, :]),
         APE_NPE = vec(APE_NPE)
     )
+    CSV.write(
+        joinpath(savepath, "intercept_estimates_$(n_lists)_$(width)_$(n_hidden)_$(train_size)_$(censoring_upper)_$(m).csv"),
+        out
+    )
 end
 
 model_files = filter(x -> !occursin("ci", x), readdir(nbe_models_path))
+intercept_savepath = joinpath("output", "intercept_estimates")
+mkpath(intercept_savepath)
 
-intercept_summaries = pmap(
+pmap(
     model_file -> begin
         wid = myid()
         println("Worker $wid evaluating model: $model_file")
-        model_intecept_summary(model_file, nbe_models_path, npe_models_path, test_path)
+        model_intecept_summary(model_file, nbe_models_path, npe_models_path, test_path, intercept_savepath)
     end,
     model_files
 )
 
-CSV.write(
-    joinpath("output", "intercept_estimate_comparison.csv"), 
-    vcat(intercept_summaries...)
-)
