@@ -41,7 +41,11 @@ CSV.write(joinpath("output", "test_data_K5.csv"), DataFrame(test_data, :auto))
 
 @everywhere function model_intecept_summary(model_file, nbe_models_path, npe_models_path, test_path, savepath)
     n_lists, width, n_hidden, train_size, censoring_lower, censoring_upper, m = parse.(Int, [m.match for m in eachmatch(r"\d+", model_file)])
-
+    output_file = joinpath(savepath, "intercept_estimates_$(n_lists)_$(width)_$(n_hidden)_$(train_size)_$(censoring_upper)_$(m).csv")
+    if isfile(output_file)
+        println("Intercept estimates for model $model_file already exist at $output_file; skipping.")
+        return
+    end
     test_data, test_pars = load_test_data(test_path, n_lists, censoring_lower, censoring_upper)
     n_pars = size(test_pars, 1)
 
@@ -77,15 +81,15 @@ CSV.write(joinpath("output", "test_data_K5.csv"), DataFrame(test_data, :auto))
         APE_NBE = vec(APE_NBE[1, :]),
         APE_NPE = vec(APE_NPE)
     )
-    CSV.write(
-        joinpath(savepath, "intercept_estimates_$(n_lists)_$(width)_$(n_hidden)_$(train_size)_$(censoring_upper)_$(m).csv"),
-        out
-    )
+    CSV.write(joinpath(savepath, output_file), out)
 end
 
 model_files = filter(x -> !occursin("ci", x), readdir(nbe_models_path))
 intercept_savepath = joinpath("output", "intercept_estimates")
 mkpath(intercept_savepath)
+
+## testing
+filter!( x -> x !== "model_15_256_3_10000_0_10_1.bson", model_files)
 
 pmap(
     model_file -> begin
