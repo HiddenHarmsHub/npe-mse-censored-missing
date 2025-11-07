@@ -78,7 +78,7 @@ grid_6 = collect(Base.product(
 output_path_nbe = joinpath("output", "models_nbe")
 mkpath(output_path_nbe)
 
-grid_nbe = vcat(grid_lists, grid_neurons, grid_censoring, grid_4, grid_5, grid_6)
+grid_nbe = unique(vcat(grid_lists, grid_neurons, grid_censoring, grid_4, grid_5, grid_6))
 
 println("Total models to train: ", length(grid_nbe))
 
@@ -114,7 +114,7 @@ pmap(
 println("Finished training regular models. Now training NPE models...")
 
 ## Now train NPE models
-grid_npe = vcat(grid_lists, grid_neurons, grid_censoring, grid_4, grid_5, grid_6)
+grid_npe = unique(vcat(grid_lists, grid_neurons, grid_censoring, grid_4, grid_5, grid_6))
 
 output_path_npe = joinpath("output", "models_npe")
 mkpath(output_path_npe)
@@ -143,3 +143,4 @@ pmap(
     end,
     grid_npe
 )
+

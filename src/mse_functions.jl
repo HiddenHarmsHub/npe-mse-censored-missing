@@ -1,4 +1,4 @@
-using Distributions, NeuralEstimators, Flux, BSON, DataFrames, CSV, Combinatorics
+using Distributions, NeuralEstimators, Flux, BSON, DataFrames, CSV, Combinatorics, Folds
 
 function sample_parameters(
     K::Int; 
@@ -32,15 +32,16 @@ function rpois(logλ; logλ_max = 43.0)
     end
 end
 
-function simulate_data(pars, m; censoring_lower = 0, censoring_upper = 0)
+function simulate_data(pars, m; censoring_lower = 0, censoring_upper = 0, all_combinations = nothing, two_digit_numbers = nothing)
     K = Int(-0.5 + (sqrt(8 * length(pars) - 7) / 2))  # Solve for K given length of pars
     intercept = pars[1]
     betas = pars[2:1+K]
     gammas = pars[2+K:end]
 
     Z = zeros(2^K - 1, m)
-    lists = enumerate_all_combinations(K)
-    γ_map = Dict(enumerate_two_digit_numbers(K) .=> collect(1:length(gammas)))
+    lists = isnothing(all_combinations) ? enumerate_all_combinations(K) : all_combinations
+    two_digit_numbers = isnothing(two_digit_numbers) ? enumerate_two_digit_numbers(K) : two_digit_numbers
+    γ_map = Dict(two_digit_numbers .=> collect(1:length(gammas)))
     for j in 1:m
         for (i, list) in enumerate(lists)
             logλ = intercept
@@ -153,28 +154,6 @@ function construct_MLP(width::Int, n_hidden::Int, n_lists::Int, censoring::Bool 
     )
 end
 
-function construct_MLP_c(width::Int, n_hidden::Int, n_lists::Int, intercept_support = nothing)
-    n_data = 2^n_lists - 1
-    n_pars = 1 + n_lists + binomial(n_lists, 2)  # intercept + betas + gammas
-    n_input = n_data * 2 + 1
-
-    if !isnothing(intercept_support)
-        a, b = Float32(intercept_support[1]), Float32(intercept_support[2])
-        final_layer = Parallel(
-            vcat,
-            Chain(Dense(width, 1, identity), Compress(a, b)),  # Compress to the support of the uniform prior
-            Dense(width, n_pars - 1, identity)  # Identity for betas and gammas
-        )
-    else
-        final_layer = Dense(width, n_pars)
-    end
-
-    return Chain(
-        Dense(n_input, width, relu),
-        [Dense(width, width, relu) for _ in 1:n_hidden]...,
-        final_layer
-    )
-end
 
 function train_model_mlp(n_lists, width, n_hidden, train_size; m = 1, censoring_lower = 0, censoring_upper = 0, savepath = nothing, intercept_dist = Uniform(1, 10))
     estimator_mdl_str = "model_$(n_lists)_$(width)_$(n_hidden)_$(train_size)_$(censoring_lower)_$(censoring_upper)_$(m).bson"
@@ -182,8 +161,16 @@ function train_model_mlp(n_lists, width, n_hidden, train_size; m = 1, censoring_
 
     intercept_support = ifelse(typeof(intercept_dist) <: Uniform, params(intercept_dist), nothing)
 
+    all_combinations = enumerate_all_combinations(n_lists)
+    two_digit_numbers = enumerate_two_digit_numbers(n_lists)
+
     sample_nbe(n_reps) = hcat([sample_parameters(n_lists, intercept_dist = intercept_dist) for _ in 1:n_reps]...)
-    simulate_nbe(θ, m) = hcat([simulate_data(params, m, censoring_lower = censoring_lower, censoring_upper = censoring_upper) for params in eachcol(θ)]...)
+    function simulate_nbe(θ, m)
+        Z = Folds.map(eachcol(θ)) do params
+            simulate_data(params, m, censoring_lower = censoring_lower, censoring_upper = censoring_upper, all_combinations = all_combinations, two_digit_numbers = two_digit_numbers)
+        end 
+        return hcat(Z...)
+    end
     network = construct_MLP(width, n_hidden, n_lists, censoring_upper > 0, intercept_support)
     estimator = PointEstimator(network)
 
@@ -214,52 +201,6 @@ function train_model_mlp(n_lists, width, n_hidden, train_size; m = 1, censoring_
     end
 end
 
-function train_model_ds(n_lists, width, n_encoder, n_decoder, train_size; m = 1, censoring_lower = 0, censoring_upper = 0, savepath = nothing, intercept_dist = Uniform(1, 10))
-    estimator_mdl_str = "model_$(n_lists)_$(width)_$(n_encoder)_$(n_decoder)_$(train_size)_$(censoring_lower)_$(censoring_upper)_$(m).bson"
-
-    n_data = 2^n_lists - 1
-    n_pars = 1 + n_lists + binomial(n_lists, 2)  # intercept + betas + gammas
-    if censoring_upper > 0
-        n_data *= 2  # Double the input size for censored data (U and W)
-    end
-
-    intercept_support = ifelse(typeof(intercept_dist) <: Uniform, params(intercept_dist), nothing)
-
-    sample_nbe(n_reps) = hcat([sample_parameters(n_lists, intercept_dist = intercept_dist) for _ in 1:n_reps]...)
-    simulate_nbe(θ, m) = [simulate_data(params, m, censoring_lower = censoring_lower, censoring_upper = censoring_upper) for params in eachcol(θ)]
-
-    if !isnothing(intercept_support)
-        a, b = Float32(intercept_support[1]), Float32(intercept_support[2])
-        final_layer = Parallel(
-            vcat,
-            Chain(Dense(width, 1, identity), Compress(a, b)),  # Compress to the support of the uniform prior
-            Dense(width, n_pars - 1, identity)  # Identity for betas and gammas
-        )
-    else
-        final_layer = Dense(width, n_pars)
-    end
-
-
-    ψ = Chain(Dense(n_data, width, relu), [Dense(width, width, relu) for _ in 1:n_encoder]...)
-    ϕ = Chain([Dense(width, width, relu) for _ in 1:n_decoder]..., final_layer)
-    network = DeepSet(ψ, ϕ)
-    estimator = PointEstimator(network)
-
-    estimator = train(
-        estimator, 
-        sample_nbe, 
-        simulate_nbe, 
-        K = train_size,
-        m = m
-    )
-
-    if !isnothing(savepath) 
-        BSON.@save joinpath(savepath, estimator_mdl_str) estimator
-        return nothing
-    else
-        return estimator
-    end
-end
 
 function load_model_nbe(n_lists, width, n_hidden, train_size, censoring_lower, censoring_upper, m, models_path)
     mdl_str = "model_$(n_lists)_$(width)_$(n_hidden)_$(train_size)_$(censoring_lower)_$(censoring_upper)_$m.bson"
@@ -414,15 +355,22 @@ function train_npe(n_lists, width, n_hidden, encoding_dim, train_size; m = 1, ce
         n_data *= 2  # Double the input size for censored data (U and W)
     end
 
+    all_combinations = enumerate_all_combinations(n_lists)
+    two_digit_numbers = enumerate_two_digit_numbers(n_lists)
+
     sample_nbe(n_reps) = hcat([sample_parameters(n_lists, intercept_dist = intercept_dist) for _ in 1:n_reps]...)
-    simulate_nbe(θ, m) = hcat([simulate_data(params, m, censoring_lower = censoring_lower, censoring_upper = censoring_upper) for params in eachcol(θ)]...)
+    function simulate_nbe(θ, m)
+        Z = Folds.map(eachcol(θ)) do params
+            simulate_data(params, m, censoring_lower = censoring_lower, censoring_upper = censoring_upper, all_combinations = all_combinations, two_digit_numbers = two_digit_numbers)
+        end 
+        return hcat(Z...)
+    end
     
     network = Chain(
         Dense(n_data, width, relu),
         [Dense(width, width, relu) for _ in 1:n_hidden]...,
         Dense(width, encoding_dim)
     )
-    
     
     
     q = NormalisingFlow(n_pars, encoding_dim)
