@@ -89,9 +89,6 @@ model_files = filter(x -> !occursin("ci", x), readdir(nbe_models_path))
 intercept_savepath = joinpath("output", "intercept_estimates")
 mkpath(intercept_savepath)
 
-## testing
-filter!( x -> x !== "model_15_256_3_10000_0_10_1.bson", model_files)
-
 pmap(
     model_file -> begin
         wid = myid()
