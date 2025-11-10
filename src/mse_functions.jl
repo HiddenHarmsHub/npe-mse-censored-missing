@@ -32,7 +32,7 @@ function rpois(logλ; logλ_max = 43.0)
     end
 end
 
-function simulate_data(pars, m; censoring_lower = 0, censoring_upper = 0, all_combinations = nothing, two_digit_numbers = nothing)
+function simulate_data(pars, m; censoring_lower = 0, censoring_upper = 0, all_combinations = nothing, two_digit_numbers = nothing, log_transform = true)
     K = Int(-0.5 + (sqrt(8 * length(pars) - 7) / 2))  # Solve for K given length of pars
     intercept = pars[1]
     betas = pars[2:1+K]
@@ -62,8 +62,9 @@ function simulate_data(pars, m; censoring_lower = 0, censoring_upper = 0, all_co
         U = ifelse.(censoring_lower .<= Z .<= censoring_upper, -1.0, log.(Z .+ 1))
         return Float32.(vcat(U, W))
     end
-
-    return Float32.(log.(Z .+ 1))  # Log-transform the counts
+    
+    # Log-transform the counts
+    return log_transform ? Float32.(log.(Z .+ 1)) : Z
 end
 
 function simulate_data_filtered(pars, m; censoring_lower = 0, censoring_upper = 0, K = nothing, filter_terms = nothing)
