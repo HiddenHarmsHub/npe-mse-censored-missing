@@ -1,6 +1,10 @@
 include("mse_functions.jl")
 include("mcmc_functions.jl")
 
+
+output_path = joinpath("output", "real_data_analysis")
+mkpath(output_path)
+
 ## First analyse the Silverman data
 #silverman_data = Float32.(log.(load_silverman_data_6() .+ 1))
 silverman_data = Float32.(log.(load_silverman_data() .+ 1))
@@ -47,9 +51,21 @@ ci_silverman = load_model_nbe(
 silverman_par_estimates = model_silverman(silverman_data)
 silverman_par_cis = ci_silverman(silverman_data)
 
-silverman_dark_figure = exp(silverman_par_estimates[1])
-silverman_dark_figure_lower = exp(silverman_par_cis[1])
-silverman_dark_figure_upper = exp(silverman_par_cis[length(silverman_par_estimates) + 1])
+all_combinations = enumerate_all_combinations(5)
+
+param_names(n_lists) = ["intercept"; ["beta_$(i)" for i in 1:5]; ["gamma_$(i)$(j)" for (i,j) in enumerate_two_digit_numbers(n_lists)]...]
+
+silverman_NBE_estimates = DataFrame(
+    parameter = param_names(5),
+    estimate = silverman_par_estimates,
+    lower_ci = silverman_par_cis[1:length(silverman_par_estimates)],
+    upper_ci = silverman_par_cis[length(silverman_par_estimates) .+ (1:length(silverman_par_estimates))]
+)
+
+CSV.write(
+    joinpath(output_path, "silverman_nbe_parameter_estimates.csv"),
+    silverman_NBE_estimates
+)
 
 ## Infer using NPE
 npe_models_path = joinpath("output", "models_npe")
@@ -67,9 +83,25 @@ npe_model_silverman = load_model_npe(
 bounded_sample(sample, lower, upper) = sample[:, (sample[1, :] .>= lower) .& (sample[1, :] .<= upper)]
 
 n_samples = 25000
-posterior_samples_npe = bounded_sample(sampleposterior(npe_model_silverman, reshape(silverman_data, :, 1), n_samples), 1.0, 10.0)
+posterior_samples_silverman_npe = bounded_sample(sampleposterior(npe_model_silverman, reshape(silverman_data, :, 1), n_samples), 1.0, 10.0)
 
-intercept_npe_median = median(posterior_samples_npe[1, :])
+silver_NPE_estimates = DataFrame(
+    parameter = param_names(5),
+    estimate = median(posterior_samples_silverman_npe, dims = 2)[:],
+    lower_ci = quantile.(eachrow(posterior_samples_silverman_npe), 0.025),
+    upper_ci = quantile.(eachrow(posterior_samples_silverman_npe), 0.975)
+)
+
+CSV.write(
+    joinpath(output_path, "silverman_npe_parameter_estimates.csv"),
+    silver_NPE_estimates
+)
+
+CSV.write(
+    joinpath(output_path, "silverman_npe_posterior_samples.csv"),
+    DataFrame(posterior_samples_silverman_npe', param_names(5))
+)
+
 
 ##  MCMC on Silverman data
 
@@ -83,11 +115,11 @@ gamma_dist = Normal(0, 1/5)
 censoring_lower = 0
 censoring_upper = 0
 
-m = mse_model_censored(input_counts_silverman, X, intercept_dist, beta_dist, gamma_dist, censoring_lower, censoring_upper)
+m_silverman = mse_model_censored(input_counts_silverman, X, intercept_dist, beta_dist, gamma_dist, censoring_lower, censoring_upper)
 num_chains = 4
 n_iterations = 5000
-chains = sample(
-    m, 
+chains_silverman = sample(
+    m_silverman, 
     NUTS(), 
     MCMCSerial(), 
     n_iterations, 
@@ -96,9 +128,14 @@ chains = sample(
     parallel = false
 )
 
-chains_df = DataFrame(chains)
+silverman_mcmc_df = DataFrame(chains_silverman)
 
-median(chains_df.intercept)
+CSV.write(
+    joinpath(output_path, "silverman_mcmc_posterior_samples.csv"),
+    silverman_mcmc_df
+)
+
+
 
 using StatsPlots
 
