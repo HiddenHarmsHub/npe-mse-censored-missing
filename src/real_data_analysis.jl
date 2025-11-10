@@ -51,7 +51,7 @@ ci_silverman = load_model_nbe(
 silverman_par_estimates = model_silverman(silverman_data)
 silverman_par_cis = ci_silverman(silverman_data)
 
-param_names(n_lists) = ["intercept"; ["beta_$(i)" for i in 1:n_lists]; ["gamma_$(i)$(j)" for (i,j) in enumerate_two_digit_numbers(n_lists)]...]
+param_names(n_lists) = ["alpha"; ["beta_$(i)" for i in 1:n_lists]; ["gamma_$(i)$(j)" for (i,j) in enumerate_two_digit_numbers(n_lists)]...]
 
 silverman_NBE_estimates = DataFrame(
     parameter = param_names(5),
@@ -127,6 +127,8 @@ chains_silverman = sample(
 )
 
 silverman_mcmc_df = DataFrame(chains_silverman)
+mcmc_param_mapping(n_lists) = ["intercept"; ["betas[$(i)]" for i in 1:n_lists]; ["gammas[$(i)]" for i in 1:binomial(n_lists,2)]...] .=> param_names(n_lists)
+rename!(silverman_mcmc_df, mcmc_param_mapping(5))
 
 CSV.write(
     joinpath(output_path, "silverman_mcmc_posterior_samples.csv"),
@@ -243,6 +245,7 @@ chains_king = sample(
 )
 
 res_df_king = DataFrame(chains_king)
+rename!(res_df_king, mcmc_param_mapping(4))
 
 CSV.write(
     joinpath(output_path, "king_mcmc_posterior_samples.csv"),

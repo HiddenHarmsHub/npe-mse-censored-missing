@@ -1,26 +1,52 @@
-pacman::p_load(tidyverse)
+pacman::p_load(tidyverse, Rcapture)
 
-ape_df <- read_csv(file.path("output", "intercept_ape_summary.csv"))
+colour_map <- c(
+    "NBE" = "#a6cee3",
+    "NPE" = "#1f78b4",
+    "MCMC" = "#b2df8a"
+)
+
+ape_df <- read_csv(file.path("output", "intercept_estimate_comparison.csv")) %>%
+    pivot_longer(
+        cols = c(APE_NBE, APE_NPE),
+        names_to = "Method",
+        values_to = "APE"
+    ) %>%
+    mutate(
+        Method = recode(Method, "APE_NBE" = "NBE", "APE_NPE" = "NPE"),
+        width = as.factor(width),
+        n_hidden = as.factor(n_hidden),
+        n_lists = as.factor(n_lists)
+    )
 
 train_size_fixed <- 10000
+panel_spacing_fixed <- 4
 
-## Width/number of neurons sensitivity plot
+## Width/number of neurons sensitivity plot fill = "#2c7bb6", 
 width_plot <- ape_df %>% 
     filter(
         n_lists == 5, 
         train_size == train_size_fixed,
         censoring_upper == 10,
-        n_hidden == 2
-    ) %>% 
-    ggplot(aes(x = as.factor(width), y = log(APE))) +
-    geom_boxplot(fill = "#2c7bb6", alpha = 0.6) +
+        n_hidden == 3
+    ) %>%
+    ggplot(aes(x = width, y = log(APE), fill = Method)) +
+    geom_boxplot(alpha = 0.6) +
+    scale_fill_manual(values = colour_map) +
     theme_minimal(base_size = 14) +
-    labs(x = "Number of Neurons", y = "log APE")
+    labs(x = "Number of Neurons", y = "log APE") +
+    facet_wrap(~Method) +
+    theme(
+        strip.text = element_blank(),
+        legend.position = "top",
+        panel.spacing = grid::unit(panel_spacing_fixed, "lines")
+    )
 
 ggsave(
     filename = file.path("output", "figures", "log_ape_vs_neurons.png"), 
     plot = width_plot, width = 7, height = 5, dpi = 300
 )
+
 
 ## Censoring threshold sensitivity plot
 censoring_plot <- ape_df %>% 
@@ -28,11 +54,19 @@ censoring_plot <- ape_df %>%
         n_lists == 5, 
         train_size == train_size_fixed,
         width == 256
-    ) %>% 
-    ggplot(aes(x = as.factor(censoring_upper), y = log(APE))) +
-    geom_boxplot(fill = "#2c7bb6", alpha = 0.6) +
+    ) %>%
+    ggplot(aes(x = censoring_upper, y = log(APE), fill = Method)) +
+    geom_boxplot(alpha = 0.6) +
+    scale_fill_manual(values = colour_map) +
     theme_minimal(base_size = 14) +
-    labs(x = "Censoring Threshold", y = "log APE")
+    labs(x = "Censoring Threshold", y = "log APE") +
+    scale_x_discrete(expand = c(0.01, 0)) +
+    facet_wrap(~Method) +
+    theme(
+        strip.text = element_blank(),
+        legend.position = "top",
+        panel.spacing = grid::unit(panel_spacing_fixed, "lines")
+    )
 
 ggsave(
     filename = file.path("output", "figures", "log_ape_vs_threshold.png"), 
@@ -47,15 +81,25 @@ n_lists_plot <- ape_df %>%
         width == 256,
         n_hidden == 3
     ) %>% 
-    ggplot(aes(x = as.factor(n_lists), y = log(APE))) +
-    geom_boxplot(fill = "#2c7bb6", alpha = 0.6) +
+    ggplot(aes(x = n_lists, y = log(APE), fill = Method)) +
+    geom_boxplot(alpha = 0.6) +
+    scale_fill_manual(values = colour_map) +
     theme_minimal(base_size = 14) +
-    labs(x = "Number of Lists", y = "log APE")
+    labs(x = "Number of Lists", y = "log APE") +
+    scale_x_discrete(expand = c(0.01, 0)) +
+    facet_wrap(~Method) +
+    theme(
+        strip.text = element_blank(),
+        legend.position = "top",
+        panel.spacing = grid::unit(panel_spacing_fixed, "lines")
+    )
+
 
 ggsave(
     filename = file.path("output", "figures", "log_ape_vs_lists.png"), 
     plot = n_lists_plot, width = 7, height = 5, dpi = 300
 )
+
 
 ## hidden layers sensitivity
 hidden_layers_plot <- ape_df %>% 
@@ -64,11 +108,12 @@ hidden_layers_plot <- ape_df %>%
         train_size == train_size_fixed,
         censoring_upper == 10,
         width == 256
-    ) %>% 
-    ggplot(aes(x = as.factor(n_hidden), y = log(APE))) +
-    geom_boxplot(fill = "#2c7bb6", alpha = 0.6) +
+    ) %>%
+    ggplot(aes(x = as.factor(n_hidden), y = log(APE), fill = Method)) +
+    geom_boxplot(alpha = 0.6) +
     theme_minimal(base_size = 14) +
     labs(x = "Number of Hidden Layers", y = "log APE")
+
 
 ggsave(
     filename = file.path("output", "figures", "log_ape_vs_hidden_layers.png"), 
@@ -84,11 +129,8 @@ intercept_sensitivity <- ape_df %>%
         width == 256,
         n_hidden == 3
     ) %>%
-    mutate(
-        error = abs(intercept_estimated - intercept_truth)
-    ) %>%
-    ggplot(aes(x = exp(intercept_truth), y = log(APE))) +
-    geom_point(alpha = 0.6, color = "#2c7bb6", size = 2) +
+    ggplot(aes(x = exp(intercept_truth), y = log(APE), col = Method)) +
+    geom_point(alpha = 0.6, size = 2) +
     labs(
         x = expression("True exp" * alpha),
         y = "Log APE",
@@ -261,47 +303,147 @@ ggsave(
 )
 
 
-## now the deepsets plots
 
-ape_ds_df <- read_csv(file.path("output", "intercept_ape_summary_ds.csv"))
+## real data analysis plots
 
-ape_ds_df %>%
-    ggplot(aes(x = as.factor(m))) +
-    geom_boxplot(aes(fill = as.factor(width), y = log(APE)), alpha = 0.6) +
+## silverman analysis
+silverman_nbe <- read_csv(
+   file.path("output", "real_data_analysis", "silverman_nbe_parameter_estimates.csv"),
+)
+
+silverman_npe_samples <- read_csv(
+    file.path("output", "real_data_analysis", "silverman_npe_posterior_samples.csv")
+)
+
+silverman_mcmc_samples <- read_csv(
+    file.path("output", "real_data_analysis", "silverman_mcmc_posterior_samples.csv")
+)
+
+silverman_mcmc_long <- silverman_mcmc_samples %>%
+    select(matches("intercept|beta|gamma")) %>%
+    pivot_longer(
+        cols = everything(),
+        names_to = "Parameter",
+        values_to = "Value"
+    ) %>%
+    mutate(
+        Method = "MCMC",
+        Parameter = str_replace_all(Parameter, "\\[", "_"),
+        Parameter = str_replace_all(Parameter, "\\]", "")
+    )
+
+silverman_npe_long <- silverman_npe_samples %>%
+    select(matches("intercept|beta|gamma")) %>%
+    pivot_longer(
+        cols = everything(),
+        names_to = "Parameter",
+        values_to = "Value"
+    ) %>%
+    mutate(Method = "NPE")
+
+silverman_nbe_long <- silverman_nbe %>%
+    pivot_longer(
+        cols = -parameter,
+        names_to = "Statistic",
+        values_to = "Value"
+    ) %>%
+    filter(Statistic == "estimate") %>%
+    mutate(
+        Parameter = parameter,
+        Method = "NBE"
+    ) %>%
+    select(Parameter, Value, Method)
+
+silverman_combined_samples <- bind_rows(silverman_mcmc_long, silverman_npe_long)
+
+## also compute frequentist estimates for vertical lines
+raw_data_silverman <- read_csv(file.path("data", "silverman_5.csv")) %>% 
+    mutate(
+        count = as.integer(count),
+        S1 = as.integer(str_detect(group, "1")),
+        S2 = as.integer(str_detect(group, "2")),
+        S3 = as.integer(str_detect(group, "3")),
+        S4 = as.integer(str_detect(group, "4")),
+        S5 = as.integer(str_detect(group, "5"))
+    ) %>%
+    select(S1, S2, S3, S4, S5, count)
+
+interactions <- function(x) {
+    terms <- character()
+    for(i in 1:(length(x)-1)) {
+      for (j in (i + 1):length(x)) {
+            terms  <- c(terms, paste0("S", x[i], "*S", x[j]))
+        }
+    }
+    return(paste(terms, collapse = " + "))
+}
+
+full_formula <- function(x) {
+    main_terms <- paste(paste0("S", x), collapse = " + ")
+    interaction_terms <-  interactions(x)
+    formula_str <- paste0("count ~ ", paste(main_terms,interaction_terms, sep = " + "))
+    return(formula_str)
+}
+
+
+fit_glm <- glm(
+    formula = as.formula(full_formula(1:5)),
+    data = raw_data_silverman,
+    family = poisson(link = "log")
+)
+
+frequentist_intercept <- fit_glm$coefficients
+
+
+
+create_parameter_mapping <- function(n_lists) {
+    # Create intercept mapping
+    mapping <- c("(Intercept)" = "alpha")
+    
+    # Create main effect mappings (beta)
+    for (i in 1:n_lists) {
+        mapping[paste0("S", i)] <- paste0("beta_", i)
+    }
+    
+    # Create interaction mappings (gamma)
+    for (i in 1:(n_lists - 1)) {
+        for (j in (i + 1):n_lists) {
+            mapping[paste0("S", i, ":S", j)] <- paste0("gamma_", i, j)
+        }
+    }
+    
+    return(mapping)
+}
+
+frequentist_df <- data.frame(
+    Parameter = names(fit_glm$coefficients),
+    Value = as.numeric(fit_glm$coefficients)
+) %>%
+    mutate(
+        Method = "Frequentist",
+        Parameter = recode(Parameter, !!!create_parameter_mapping(5))
+    )
+
+
+silverman_combined_samples %>%
+    ggplot(aes(x = Value, fill = Method)) +
+    geom_density(alpha = 0.6) +
+    geom_vline(
+        data = silverman_nbe_long,
+        aes(xintercept = Value),
+        linewidth = 1
+    ) +
+    facet_wrap(~Parameter, scales = "free") +
+    scale_fill_manual(values = colour_map) +
     theme_minimal(base_size = 14) +
-    labs(x = "Number of Lists", y = "log APE") +
-    theme(legend.position = "top") +
-    facet_wrap(n_encoder ~ n_dencoder)
+    labs(
+        x = "Parameter Value",
+        y = "Density",
+        fill = "Method"
+    ) +
+    theme(
+        legend.position = "top",
+        panel.spacing = grid::unit(2, "lines")
+    )
 
 
-ape_ds_df %>%
-    group_by(m, width, n_encoder, n_dencoder) %>%
-    summarise(
-        `1st Qu.` = quantile(APE, 0.25),
-        Median = median(APE),
-        Mean = mean(APE),
-        `3rd Qu.` = quantile(APE, 0.75)
-    ) %>%
-    pivot_longer(-c(m, width, n_encoder, n_dencoder), names_to = "Statistic", values_to = "Value") %>%
-    pivot_wider(names_from = m, values_from = Value) %>%
-    arrange(width, n_encoder, n_dencoder, Statistic) %>%
-    View()
-
-
-ape_ds_df %>%
-    mutate(mdl = paste0("m=", m, ", w=", width, ", enc=", n_encoder, ", dec=", n_dencoder)) %>%
-    ggplot() +
-    geom_line(aes(x = as.factor(m), y = log(APE), group = mdl, color = mdl), alpha = 0.6) +
-    theme_minimal(base_size = 14)
-
-
-ape_ds_df %>%
-        group_by(m, width, n_encoder, n_dencoder) %>%
-    summarise(
-        `1st Qu.` = quantile(APE, 0.25),
-        Median = median(APE),
-        Mean = mean(APE),
-        `3rd Qu.` = quantile(APE, 0.75)
-    ) %>%
-    ggplot(aes(x = as.factor(m), y = log(Median), group = interaction(width, n_encoder, n_dencoder), color = interaction(width, n_encoder, n_dencoder))) +
-    geom_line()
