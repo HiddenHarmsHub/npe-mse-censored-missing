@@ -9,4 +9,6 @@ src/old/
 output/test_data/
 output/mcmc_samples/
 output/mcmc_summary/
+output/npe_samples/
+output/intercept_estimates/
 slurm_output/
