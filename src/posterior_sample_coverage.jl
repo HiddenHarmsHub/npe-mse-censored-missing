@@ -29,12 +29,11 @@ coverage_tables = pmap(
         coverage.dataset .= i
         return coverage
     end,
-    1:5
+    1:size(test_data, 2)
 )
 
 CSV.write(
     joinpath("output", "coverage_comparison_npe_mcmc.csv"),
     vcat(coverage_tables...),
 )
-
 
