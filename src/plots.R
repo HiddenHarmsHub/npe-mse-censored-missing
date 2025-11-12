@@ -22,7 +22,7 @@ ape_df <- read_csv(file.path("output", "intercept_estimate_comparison.csv")) %>%
 train_size_fixed <- 10000
 panel_spacing_fixed <- 4
 
-## Width/number of neurons sensitivity plot fill = "#2c7bb6", 
+## Width/number of neurons sensitivity plot
 width_plot <- ape_df %>% 
     filter(
         n_lists == 5, 
@@ -47,7 +47,6 @@ ggsave(
     plot = width_plot, width = 7, height = 5, dpi = 300
 )
 
-
 ## Censoring threshold sensitivity plot
 censoring_plot <- ape_df %>% 
     filter(
@@ -55,7 +54,7 @@ censoring_plot <- ape_df %>%
         train_size == train_size_fixed,
         width == 256
     ) %>%
-    ggplot(aes(x = censoring_upper, y = log(APE), fill = Method)) +
+    ggplot(aes(x = as.factor(censoring_upper), y = log(APE), fill = Method)) +
     geom_boxplot(alpha = 0.6) +
     scale_fill_manual(values = colour_map) +
     theme_minimal(base_size = 14) +
@@ -86,7 +85,6 @@ n_lists_plot <- ape_df %>%
     scale_fill_manual(values = colour_map) +
     theme_minimal(base_size = 14) +
     labs(x = "Number of Lists", y = "log APE") +
-    scale_x_discrete(expand = c(0.01, 0)) +
     facet_wrap(~Method) +
     theme(
         strip.text = element_blank(),
@@ -94,12 +92,10 @@ n_lists_plot <- ape_df %>%
         panel.spacing = grid::unit(panel_spacing_fixed, "lines")
     )
 
-
 ggsave(
     filename = file.path("output", "figures", "log_ape_vs_lists.png"), 
     plot = n_lists_plot, width = 7, height = 5, dpi = 300
 )
-
 
 ## hidden layers sensitivity
 hidden_layers_plot <- ape_df %>% 
@@ -111,9 +107,15 @@ hidden_layers_plot <- ape_df %>%
     ) %>%
     ggplot(aes(x = as.factor(n_hidden), y = log(APE), fill = Method)) +
     geom_boxplot(alpha = 0.6) +
+    scale_fill_manual(values = colour_map) +
     theme_minimal(base_size = 14) +
-    labs(x = "Number of Hidden Layers", y = "log APE")
-
+    labs(x = "Number of Hidden Layers", y = "log APE") +
+    facet_wrap(~Method) +
+    theme(
+        strip.text = element_blank(),
+        legend.position = "top",
+        panel.spacing = grid::unit(panel_spacing_fixed, "lines")
+    )
 
 ggsave(
     filename = file.path("output", "figures", "log_ape_vs_hidden_layers.png"), 
@@ -130,15 +132,38 @@ intercept_sensitivity <- ape_df %>%
         n_hidden == 3
     ) %>%
     ggplot(aes(x = exp(intercept_truth), y = log(APE), col = Method)) +
-    geom_point(alpha = 0.6, size = 2) +
+    geom_point(alpha = 0.3, size = 2) +
+    geom_smooth(method = "loess", se = TRUE) +
     labs(
-        x = expression("True exp" * alpha),
+        x = "True hidden population size",
         y = "Log APE",
     ) +
     theme_minimal(base_size = 14) +
     theme(
         plot.title = element_text(face = "bold"),
-        panel.grid.minor = element_blank()
+        panel.grid.minor = element_blank(),
+        legend.position = "top"
+    )
+
+intercept_sensitivity_smoothed <- ape_df %>% 
+    filter(
+        n_lists == 5, 
+        train_size == train_size_fixed,
+        censoring_upper == 10,
+        width == 256,
+        n_hidden == 3
+    ) %>%
+    ggplot(aes(x = exp(intercept_truth), y = log(APE), col = Method)) +
+    geom_smooth(method = "loess", se = TRUE) +
+    labs(
+        x = "True hidden population size",
+        y = "Log APE",
+    ) +
+    theme_minimal(base_size = 14) +
+    theme(
+        plot.title = element_text(face = "bold"),
+        panel.grid.minor = element_blank(),
+        legend.position = "top"
     )
 
 ggsave(
@@ -221,14 +246,16 @@ reduced_ape_df <- ape_df %>%
     ) %>% 
     select(
         dataset,
-        median_nbe = intercept_estimated
+        median_nbe = intercept_NBE,
+        median_npe = intercept_NPE
     )
 
 mcmc_nbe_comparison_df <- mcmc_df %>% 
     left_join(reduced_ape_df) %>%
     mutate(
         ape_mcmc = abs((exp(true_intercept) - exp(median_mcmc)) / exp(true_intercept)),
-        ape_nbe = abs((exp(true_intercept) - exp(median_nbe)) / exp(true_intercept))
+        ape_nbe = abs((exp(true_intercept) - exp(median_nbe)) / exp(true_intercept)),
+        ape_npe = abs((exp(true_intercept) - exp(median_npe)) / exp(true_intercept))
     )
 
 
@@ -368,6 +395,12 @@ raw_data_silverman <- read_csv(file.path("data", "silverman_5.csv")) %>%
     ) %>%
     select(S1, S2, S3, S4, S5, count)
 
+silverman_data <- expand.grid(replicate(5, 0:1, simplify = FALSE)) %>%
+    setNames(paste0("S", 1:5)) %>%
+    filter(rowSums(.) > 0) %>%
+    left_join(raw_data_silverman, by = c("S1", "S2", "S3", "S4", "S5")) %>%
+    mutate(count = ifelse(is.na(count), 0, count))
+
 interactions <- function(x) {
     terms <- character()
     for(i in 1:(length(x)-1)) {
@@ -388,13 +421,9 @@ full_formula <- function(x) {
 
 fit_glm <- glm(
     formula = as.formula(full_formula(1:5)),
-    data = raw_data_silverman,
+    data = silverman_data,
     family = poisson(link = "log")
 )
-
-frequentist_intercept <- fit_glm$coefficients
-
-
 
 create_parameter_mapping <- function(n_lists) {
     # Create intercept mapping
@@ -425,12 +454,18 @@ frequentist_df <- data.frame(
     )
 
 
-silverman_combined_samples %>%
+silverman_estimate_comparison <- silverman_combined_samples %>%
     ggplot(aes(x = Value, fill = Method)) +
     geom_density(alpha = 0.6) +
     geom_vline(
-        data = silverman_nbe_long,
+        data = silverman_nbe_long %>% filter(Parameter != "alpha"),
         aes(xintercept = Value),
+        linewidth = 1
+    ) +
+    geom_vline(
+        data = frequentist_df %>% filter(Parameter != "alpha"),
+        aes(xintercept = Value),
+        color = "green",
         linewidth = 1
     ) +
     facet_wrap(~Parameter, scales = "free") +
@@ -447,3 +482,7 @@ silverman_combined_samples %>%
     )
 
 
+ggsave(
+    filename = file.path("output", "figures", "silverman_parameter_estimate_comparison.png"), 
+    plot = silverman_estimate_comparison, width = 10, height = 8, dpi = 300
+)

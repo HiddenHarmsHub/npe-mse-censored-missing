@@ -51,7 +51,6 @@ ci_silverman = load_model_nbe(
 silverman_par_estimates = model_silverman(silverman_data)
 silverman_par_cis = ci_silverman(silverman_data)
 
-param_names(n_lists) = ["alpha"; ["beta_$(i)" for i in 1:n_lists]; ["gamma_$(i)$(j)" for (i,j) in enumerate_two_digit_numbers(n_lists)]...]
 
 silverman_NBE_estimates = DataFrame(
     parameter = param_names(5),
@@ -77,8 +76,6 @@ npe_model_silverman = load_model_npe(
     1, 
     npe_models_path
 )
-
-bounded_sample(sample, lower, upper) = sample[:, (sample[1, :] .>= lower) .& (sample[1, :] .<= upper)]
 
 n_samples = 25000
 posterior_samples_silverman_npe = bounded_sample(sampleposterior(npe_model_silverman, reshape(silverman_data, :, 1), n_samples), 1.0, 10.0)

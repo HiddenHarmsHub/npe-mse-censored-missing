@@ -113,13 +113,13 @@ NPE_estimator = load_model_npe(
     npe_models_path
 )
 
-test_data
-
 par_names = param_names(5)
-npe_samples_path = joinpath("output", "npe_posterior_samples")
+npe_samples_path = joinpath("output", "npe_samples")
 mkpath(npe_samples_path)
+
 pmap(
     i -> begin
+        Random.seed!(i)
         posterior_samples = sampleposterior(NPE_estimator, reshape(test_data[:, i], :, 1), 20000)
         CSV.write(
             joinpath(npe_samples_path, "npe_test_results_$(i).csv"),
