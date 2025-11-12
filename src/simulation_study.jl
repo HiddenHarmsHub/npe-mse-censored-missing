@@ -34,10 +34,6 @@ for K in list_sizes
     println("Generated test data for K=$K")
 end
 
-## Also save K=5 to csv for comaprison with MCMC
-test_data, test_pars = load_test_data(test_path, 5, 0, 10)
-CSV.write(joinpath("output", "test_data_K5.csv"), DataFrame(test_data, :auto))
-
 
 @everywhere function model_intecept_summary(model_file, nbe_models_path, npe_models_path, test_path, savepath)
     n_lists, width, n_hidden, train_size, censoring_lower, censoring_upper, m = parse.(Int, [m.match for m in eachmatch(r"\d+", model_file)])
@@ -96,5 +92,40 @@ pmap(
         model_intecept_summary(model_file, nbe_models_path, npe_models_path, test_path, intercept_savepath)
     end,
     model_files
+)
+
+
+
+## Also produce samples from the NPE posterior for K=5 test set
+
+# save K=5 to csv for comaprison with MCMC
+test_data, test_pars = load_test_data(test_path, 5, 0, 10)
+CSV.write(joinpath("output", "test_data_K5.csv"), DataFrame(test_data, :auto))
+
+NPE_estimator = load_model_npe(
+    5, 
+    256, 
+    3,
+    10000,
+    0, 
+    10, 
+    1, 
+    npe_models_path
+)
+
+test_data
+
+par_names = param_names(5)
+npe_samples_path = joinpath("output", "npe_posterior_samples")
+mkpath(npe_samples_path)
+pmap(
+    i -> begin
+        posterior_samples = sampleposterior(NPE_estimator, reshape(test_data[:, i], :, 1), 20000)
+        CSV.write(
+            joinpath(npe_samples_path, "npe_test_results_$(i).csv"),
+            DataFrame(posterior_samples', par_names)
+        )
+    end,
+    1:size(test_data, 2)
 )
 
