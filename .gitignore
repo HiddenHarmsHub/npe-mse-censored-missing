@@ -10,5 +10,6 @@ output/test_data/
 output/mcmc_samples/
 output/mcmc_summary/
 output/npe_samples/
+output/npe_summary/
 output/intercept_estimates/
 slurm_output/

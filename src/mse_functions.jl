@@ -394,6 +394,19 @@ function train_npe(n_lists, width, n_hidden, encoding_dim, train_size; m = 1, ce
     end
 end
 
+function coverage_table(samples, truth, levels, method)
+    rows = NamedTuple[]
+    for L in levels
+        α = (1 - L) / 2
+        lo = quantile(samples, α)
+        hi = quantile(samples, 1 - α)
+        push!(rows, (method=method, param="intercept", level=L, inside=(truth ≥ lo && truth ≤ hi)))
+    end
+    DataFrame(rows)
+end
+
 bounded_sample(sample, lower, upper) = sample[:, (sample[1, :] .>= lower) .& (sample[1, :] .<= upper)]
 
 param_names(n_lists) = ["alpha"; ["beta_$(i)" for i in 1:n_lists]; ["gamma_$(i)$(j)" for (i,j) in enumerate_two_digit_numbers(n_lists)]...]
+
+
