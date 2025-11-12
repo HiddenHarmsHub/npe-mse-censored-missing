@@ -115,7 +115,9 @@ NPE_estimator = load_model_npe(
 
 par_names = param_names(5)
 npe_samples_path = joinpath("output", "npe_samples")
+npe_summary_path = joinpath("output", "npe_summary")
 mkpath(npe_samples_path)
+mkpath(npe_summary_path)
 
 pmap(
     i -> begin
@@ -124,6 +126,19 @@ pmap(
         CSV.write(
             joinpath(npe_samples_path, "npe_test_results_$(i).csv"),
             DataFrame(posterior_samples', par_names)
+        )
+
+        CSV.write(
+            joinpath(npe_summary_path, "npe_test_summary_$(i).csv"),
+            DataFrame(
+                parameters = par_names,
+                true_values = test_pars[:, i],
+                estimated_means = mean(posterior_samples, dims=2)[:],
+                estimated_medians = median(posterior_samples, dims=2)[:],
+                estimated_std = std(posterior_samples, dims=2)[:],
+                lower_95ci = quantile.(eachrow(posterior_samples), 0.025),
+                upper_95ci = quantile.(eachrow(posterior_samples), 0.975)
+            )
         )
     end,
     1:size(test_data, 2)
