@@ -38,7 +38,7 @@ end
 @everywhere function model_intecept_summary(model_file, nbe_models_path, npe_models_path, test_path, savepath)
     n_lists, width, n_hidden, train_size, censoring_lower, censoring_upper, m = parse.(Int, [m.match for m in eachmatch(r"\d+", model_file)])
     output_file = "intercept_estimates_$(n_lists)_$(width)_$(n_hidden)_$(train_size)_$(censoring_lower)_$(censoring_upper)_$(m).csv"
-    if isfile(output_file)
+    if isfile(joinpath(savepath, output_file))
         println("Intercept estimates for model $model_file already exist at $output_file; skipping.")
         return
     end
