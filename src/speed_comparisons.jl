@@ -1,44 +1,90 @@
 using Pkg; Pkg.activate(".")
-using Distributed, SlurmClusterManager
-addprocs(SlurmManager(); exeflags=["--threads", "1", "--project"])
 
-@everywhere using BenchmarkTools, Random
-@everywhere include("mse_functions.jl")
-@everywhere include("mcmc_functions.jl")
+using Statistics, Random
+include("mse_functions.jl")
+include("mcmc_functions.jl")
 
-
-@everywhere function get_nbe_estimates(nbe_model, nbe_model_ci, test_data, slice_idx)
+function get_nbe_estimates(nbe_model, nbe_model_ci, test_data, slice_idx)
     nbe_model(test_data[:, slice_idx])
     nbe_model_ci(test_data[:, slice_idx])
 end
 
-@everywhere function run_speed_comparison(nbe_model, nbe_model_ci, npe_model, test_data, test_pars, n_lists, iterations_list, slice_idx, savepath)
-    nbe_time = @benchmark get_nbe_estimates(nbe_model, nbe_model_ci, test_data, slice_idx)
+
+function run_speed_comparison(nbe_model, nbe_model_ci, npe_model, test_data, test_pars, n_lists, iterations_list, slice_idx, savepath)
+    # Benchmark NBE with multiple runs
+    n_warmup = 1
+    n_runs = 10
+    
+    # Warmup runs
+    for _ in 1:n_warmup
+        get_nbe_estimates(nbe_model, nbe_model_ci, test_data, slice_idx)
+    end
+    
+    # Timed runs
+    nbe_times = zeros(n_runs)
+    for i in 1:n_runs
+        nbe_times[i] = @elapsed get_nbe_estimates(nbe_model, nbe_model_ci, test_data, slice_idx)
+    end
+    
+    # Store all runs
     out = DataFrame(
-        dataset = slice_idx,
-        method = "NBE",
-        iterations = 0,
-        time = median(nbe_time).time
+        dataset = Int[],
+        method = String[],
+        iterations = Int[],
+        run = Int[],
+        time = Float64[]
     )
+    
+    for (run_idx, time_val) in enumerate(nbe_times)
+        push!(out, (
+            dataset = slice_idx,
+            method = "NBE",
+            iterations = 0,
+            run = run_idx,
+            time = time_val * 1e9  # Convert to nanoseconds
+        ))
+    end
 
     for num_iterations in iterations_list
         println("Benchmarking MCMC with $num_iterations iterations...")
-        mcmc_time = @benchmark run_mcmc_test_slice(slice_idx, n_lists, test_data, test_pars, num_chains = 4, samples_path = nothing, summary_path = nothing, n_iterations = num_iterations)
-        push!(out, (
-            dataset = slice_idx,
-            method = "MCMC",
-            iterations = num_iterations,
-            time = median(mcmc_time).time
-        ))
+        
+        # Warmup run for MCMC
+        run_mcmc_test_slice(slice_idx, n_lists, test_data, test_pars, num_chains = 4, samples_path = nothing, summary_path = nothing, n_iterations = num_iterations)
+        
+        # Timed runs for MCMC
+        mcmc_times = zeros(n_runs)
+        for i in 1:n_runs
+            mcmc_times[i] = @elapsed run_mcmc_test_slice(slice_idx, n_lists, test_data, test_pars, num_chains = 4, samples_path = nothing, summary_path = nothing, n_iterations = num_iterations)
+        end
+        
+        for (run_idx, time_val) in enumerate(mcmc_times)
+            push!(out, (
+                dataset = slice_idx,
+                method = "MCMC",
+                iterations = num_iterations,
+                run = run_idx,
+                time = time_val * 1e9  # Convert to nanoseconds
+            ))
+        end
 
-        npe_time = @benchmark sampleposterior(npe_model, reshape(test_data[:, slice_idx], :, 1), num_iterations)
+        # Warmup run for NPE
+        sampleposterior(npe_model, reshape(test_data[:, slice_idx], :, 1), num_iterations)
+        
+        # Timed runs for NPE
+        npe_times = zeros(n_runs)
+        for i in 1:n_runs
+            npe_times[i] = @elapsed sampleposterior(npe_model, reshape(test_data[:, slice_idx], :, 1), num_iterations)
+        end
 
-        push!(out, (
-            dataset = slice_idx,
-            method = "NPE",
-            iterations = num_iterations,
-            time = median(npe_time).time
-        ))
+        for (run_idx, time_val) in enumerate(npe_times)
+            push!(out, (
+                dataset = slice_idx,
+                method = "NPE",
+                iterations = num_iterations,
+                run = run_idx,
+                time = time_val * 1e9  # Convert to nanoseconds
+            ))
+        end
     end
 
     CSV.write(
@@ -101,10 +147,8 @@ iterations_list = 1000 * 2 .^ collect(0:5)
 iterations_list = iterations_list[1:3]
 datasets_to_sample = datasets_to_sample[1:4]
 
-pmap(
+map(
     slice_idx -> begin
-        wid = myid()
-        println("Worker $wid running speed comparison for dataset $slice_idx")
         run_speed_comparison(
             nbe_model,
             nbe_model_ci,
