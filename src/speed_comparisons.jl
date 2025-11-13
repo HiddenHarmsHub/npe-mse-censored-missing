@@ -23,7 +23,7 @@ end
 
     for num_iterations in iterations_list
         println("Benchmarking MCMC with $num_iterations iterations...")
-        mcmc_time = @benchmark run_mcmc_test_slice($slice_idx, $n_lists, $test_data, $test_pars, num_chains = 4, samples_path = nothing, summary_path = nothing, n_iterations = $num_iterations)
+        mcmc_time = @benchmark run_mcmc_test_slice(slice_idx, n_lists, test_data, test_pars, num_chains = 4, samples_path = nothing, summary_path = nothing, n_iterations = $num_iterations)
         push!(out, (
             dataset = slice_idx,
             method = "MCMC",
@@ -31,7 +31,7 @@ end
             time = median(mcmc_time).time
         ))
 
-        npe_time = @benchmark sampleposterior($npe_model, reshape($test_data[:, $slice_idx], :, 1), $num_iterations)
+        npe_time = @benchmark sampleposterior($npe_model, reshape(test_data[:, slice_idx], :, 1), $num_iterations)
 
         push!(out, (
             dataset = slice_idx,
@@ -42,7 +42,7 @@ end
     end
 
     CSV.write(
-        joinpath("output", "speed_comparison_dataset_$(slice_idx).csv"),
+        joinpath(savepath, "speed_comparison_dataset_$(slice_idx).csv"),
         out
     )
 end
