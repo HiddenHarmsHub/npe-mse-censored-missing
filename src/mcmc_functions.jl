@@ -44,8 +44,12 @@ end
 function run_mcmc_test_slice(slice_idx, n_lists, test_data, test_pars; num_chains = 4, samples_path = nothing, summary_path = nothing, n_iterations = 5000)
     println("Running MCMC for slice $slice_idx...")
 
-    samples_file = joinpath(samples_path, "mcmc_test_results_$slice_idx.csv")
-    summary_file = joinpath(summary_path, "mcmc_test_summary_$slice_idx.csv")
+    if isnothing(samples_path) && isnothing(summary_path)
+        println("No output paths provided; running MCMC without saving results.")
+    else
+        samples_file = joinpath(samples_path, "mcmc_test_results_$slice_idx.csv")
+        summary_file = joinpath(summary_path, "mcmc_test_summary_$slice_idx.csv")
+    end
 
     n_data = 2^n_lists - 1
     mcmc_test_data = test_data[1:n_data, slice_idx]

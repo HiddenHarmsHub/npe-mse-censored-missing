@@ -1,4 +1,4 @@
-pacman::p_load(tidyverse, Rcapture)
+pacman::p_load(tidyverse, Rcapture, ggh4x)
 
 colour_map <- c(
     "NBE" = "#a6cee3",
@@ -203,10 +203,10 @@ censoring_summary_table %>%
 
 ### Compare MCMC estimates
 
-mcmc_intercept_summary_file <- file.path("output", "mcmc_intercept_summary.csv")
+mcmc_summary_file <- file.path("output", "mcmc_summary.csv")
 
-if(file.exists(mcmc_intercept_summary_file)) {
-    mcmc_df <- read_csv(mcmc_intercept_summary_file, show_col_types = FALSE)
+if(file.exists(mcmc_summary_file)) {
+    mcmc_df <- read_csv(mcmc_summary_file, show_col_types = FALSE)
 } else {
     mcmc_files <- list.files(
         path = file.path("output", "mcmc_summary"), 
@@ -217,46 +217,399 @@ if(file.exists(mcmc_intercept_summary_file)) {
     mcmc_df <- lapply(mcmc_files, function(mcmc_file) {
         mcmc_df <- read_csv(mcmc_file, show_col_types = FALSE)
         mcmc_df$dataset <- parse_number(mcmc_file)
-        return(mcmc_df[1,])
+        return(mcmc_df)
     }) %>% 
         bind_rows() %>% 
         select(
             dataset, 
-            true_intercept = true_values, 
+            parameters,
+            true_values,
             median_mcmc = estimated_medians,
-            lower_ci = lower_95ci,
-            upper_ci = upper_95ci,
+            lower_ci_mcmc = lower_95ci,
+            upper_ci_mcmc = upper_95ci,
             rhat
         )
 
     write.csv(
         mcmc_df, 
-        file.path("output", "mcmc_intercept_summary.csv"), 
+        file.path("output", "mcmc_summary.csv"), 
         row.names = FALSE
     )
 }
 
-reduced_ape_df <- ape_df %>% 
+npe_summary_file <- file.path("output", "npe_summary.csv")
+if(file.exists(npe_summary_file)) {
+    npe_df <- read_csv(npe_summary_file, show_col_types = FALSE)
+} else {
+    npe_files <- list.files(
+        path = file.path("output", "npe_summary"), 
+        pattern = "*.csv", 
+        full.names = TRUE
+    )
+
+    npe_df <- lapply(npe_files, function(npe_file) {
+        npe_df <- read_csv(npe_file, show_col_types = FALSE)
+        npe_df$dataset <- parse_number(npe_file)
+        return(npe_df)
+    }) %>% 
+        bind_rows() %>% 
+        select(
+            dataset, 
+            parameters,
+            true_values,
+            median_npe = estimated_medians,
+            lower_ci_npe = lower_95ci,
+            upper_ci_npe = upper_95ci
+        )
+
+    write.csv(
+        npe_df, 
+        file.path("output", "npe_summary.csv"), 
+        row.names = FALSE
+    )
+}
+
+nbe_df <- ape_df %>% 
     filter( 
         n_lists == 5, 
         train_size == train_size_fixed,
+        censoring_lower == 0,
         censoring_upper == 10,
         width == 256,
-        n_hidden == 3
+        n_hidden == 3,
+        Method == "NBE"
     ) %>% 
     select(
         dataset,
         median_nbe = intercept_NBE,
-        median_npe = intercept_NPE
+        lower_ci_nbe = intercept_NBE_lower_ci,
+        upper_ci_nbe = intercept_NBE_upper_ci,
     )
 
-mcmc_nbe_comparison_df <- mcmc_df %>% 
-    left_join(reduced_ape_df) %>%
+comparison_df <- mcmc_df %>%
+    filter(parameters == "intercept") %>%
+    select(-parameters) %>% 
+    left_join(
+        npe_df %>%
+            filter(parameters == "alpha") %>%
+            select(-parameters),
+        by = c("dataset", "true_values")
+    ) %>%
+    left_join(nbe_df, by = "dataset") %>%
+    pivot_longer(
+        cols = c(
+            median_mcmc, median_npe, median_nbe,
+            lower_ci_mcmc, lower_ci_npe, lower_ci_nbe,
+            upper_ci_mcmc, upper_ci_npe, upper_ci_nbe
+        ),
+        names_to = c(".value", "Method"),
+        names_pattern = "(.+)_(mcmc|npe|nbe)"
+    ) %>%
+    mutate(
+        Method = recode(Method, mcmc = "MCMC", npe = "NPE", nbe = "NBE"),
+        error = exp(median) - exp(true_values),
+        ape = abs((exp(true_values) - exp(median)) / exp(true_values)),
+        absolute_error = abs(error)
+    ) %>%
+    pivot_longer(
+        cols = c(error, ape, absolute_error),
+        names_to = "Metric",
+        values_to = "Value"
+    )
+
+
+point_estimates <- comparison_df %>%
+    mutate(
+        Metric = recode(
+            Metric, 
+            "absolute_error" = "absolute error",
+            "ape" = "absolute percentage error"
+        ),
+        Metric = factor(Metric, levels = c("error", "absolute error", "absolute percentage error"))
+    ) %>%
+    ggplot(aes(y = Value, x = Method, fill = Method)) +
+    geom_violin(alpha = 0.5) +
+    scale_fill_manual(values = colour_map) +
+    ggh4x::facet_wrap2(
+        ~Metric, 
+        scales = "free_y",
+        labeller = labeller(Metric = function(x) toupper(x))
+    ) +
+    labs(
+        x = "Method",
+        y = "Value",
+        fill = "Method"
+    ) +
+    theme_minimal(base_size = 14) +
+    theme(
+        plot.title = element_text(face = "bold"),
+        panel.grid.minor = element_blank(),
+        legend.position = "top"
+    )
+
+ggsave(
+    filename = file.path("output", "figures", "point_estimates_comparison.png"), 
+    plot = point_estimates, width = 10, height = 6, dpi = 300
+)
+
+point_estimates_zoomed <- comparison_df %>%
+    mutate(
+        Metric = recode(
+            Metric, 
+            "absolute_error" = "absolute error",
+            "ape" = "absolute percentage error"
+        ),
+        Metric = factor(Metric, levels = c("error", "absolute error", "absolute percentage error"))
+    ) %>%
+    ggplot(aes(y = Value, x = Method, fill = Method)) +
+    geom_violin(alpha = 0.5) +
+    scale_fill_manual(values = colour_map) +
+    ggh4x::facet_wrap2(
+        ~Metric, 
+        scales = "free_y",
+        labeller = labeller(Metric = function(x) toupper(x))
+    ) +
+    ggh4x::facetted_pos_scales(
+        y = list(
+            Metric == "absolute error"  ~ scale_y_continuous(trans = "log1p"),
+            Metric == "absolute percentage error" ~ scale_y_continuous(trans = "log1p"),
+            Metric == "error" ~ scale_y_continuous(limits = c(-5000, 5000))
+        )
+    ) +
+    labs(
+        x = "Method",
+        y = "Value",
+        fill = "Method"
+    ) +
+    theme_minimal(base_size = 14) +
+    theme(
+        plot.title = element_text(face = "bold"),
+        panel.grid.minor = element_blank(),
+        legend.position = "top"
+    )
+
+ggsave(
+    filename = file.path("output", "figures", "point_estimates_comparison_zoomed.png"), 
+    plot = point_estimates_zoomed, width = 10, height = 6, dpi = 300
+)
+
+
+point_estimate_summaries <- comparison_df %>%
+    group_by(Method, Metric) %>%
+    summarise(
+        Mean = mean(Value),
+        Median = median(Value),
+        SD = sd(Value),
+        Q1 = quantile(Value, 0.25),
+        Q3 = quantile(Value, 0.75)
+    ) %>%
+    arrange(Metric, Method)
+
+comparison_df %>%
+    group_by(Method, Metric) %>%
+    summarise(
+        Mean = mean(Value),
+        RMSE = sqrt(mean(Value^2)),
+        .groups = "drop"
+    ) %>%
+    filter(Metric %in% c("error", "ape")) %>%
+    pivot_wider(
+        names_from = Metric,
+        values_from = c(Mean, RMSE)
+    ) %>%
+    select(Method, Mean_error, Mean_ape, RMSE_error) %>%
+    rename(
+        Bias = Mean_error,
+        `Mean APE` = Mean_ape,
+        `RMSE` = RMSE_error
+    )
+
+
+## uncertainty quantification plots
+
+
+
+comparison_df %>%
+    select(-c(Metric, Value)) %>%
+    distinct() %>%
+    mutate(
+        param_estimate_in_CI = ifelse(
+            (true_values >= lower_ci) & (true_values <= upper_ci),
+            TRUE,
+            FALSE
+        )
+    ) %>%
+    group_by(Method) %>%
+    summarise(
+        coverage_par = mean(param_estimate_in_CI)
+    )
+
+comparison_df %>%
+    select(-c(Metric, Value)) %>%
+    distinct() %>%
+    mutate(width = exp(upper_ci) - exp(lower_ci)) %>%
+    arrange(desc(width))
+
+width_plot <- comparison_df %>%
+    select(-c(Metric, Value)) %>%
+    distinct() %>%
+    mutate(width = exp(upper_ci) - exp(lower_ci)) %>%
+    ggplot(aes(x = Method, y = width, fill = Method)) +
+    geom_boxplot(alpha = 0.5) +
+    scale_fill_manual(values = colour_map) +
+    theme_minimal(base_size = 14) +
+    labs(x = "Method", y = "95% Credible Interval Width (Hidden Population Size)") +
+    theme(
+        plot.title = element_text(face = "bold"),
+        panel.grid.minor = element_blank(),
+        legend.position = "top"
+    )
+
+ggsave(
+    filename = file.path("output", "figures", "ci_width_comparison.png"), 
+    plot = width_plot, width = 7, height = 5, dpi = 300
+)
+
+
+coverage_df <- read_csv(file.path("output", "coverage_comparison_npe_mcmc.csv"))
+
+converged_datasets <- mcmc_df %>%
+    filter(parameters == "intercept", rhat <= 1.01) %>%
+    pull(dataset) %>%
+    unique()
+
+
+coverage_plot <- coverage_df %>%
+    group_by(method, level) %>%
+    summarise(mean_coverage = mean(inside)) %>%
+    bind_rows(data.frame(
+        method = "y=x",
+        level = seq(0, 1, by = 0.01),
+        mean_coverage = seq(0, 1, by = 0.01)
+    )) %>%
+    ggplot(aes(x = level, y = mean_coverage)) +
+    geom_line(aes(col = method), lwd = 1.5) +
+    labs(
+        x = "Credible Interval Level",
+        y = "Empirical Coverage",
+        col = "Method"
+    ) +
+    scale_color_manual(
+        values = c(colour_map, "y=x" = "red"),
+        breaks = c(names(colour_map), "y=x")
+    ) +
+    theme_minimal(base_size = 14) +
+    theme(
+        plot.title = element_text(face = "bold"),
+        panel.grid.minor = element_blank(),
+        legend.position = "top"
+    )
+
+ggsave(
+    filename = file.path("output", "figures", "coverage_comparison.png"), 
+    plot = coverage_plot, width = 7, height = 5, dpi = 300
+)
+
+
+
+
+
+
+rank_df <- read_csv(file.path("output", "rank_comparison_npe_mcmc.csv"))
+
+
+hist(rank_df$MCMC_rank)
+
+
+
+
+
+
+
+
+
+comparison_df %>%
+    select(-c(Metric, Value, rhat)) %>%
+    distinct() %>%
+    mutate(width = exp(upper_ci) - exp(lower_ci)) %>%
+    filter(Method != "NBE") %>%
+    select(-c(true_values, median, lower_ci, upper_ci)) %>% 
+    pivot_wider(
+        names_from = Method,
+        values_from = width
+    ) %>%
+    ggplot(aes(x = NPE, y = MCMC)) +
+    geom_point() +
+    geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "red") 
+
+
+comparison_df %>%
+    select(-c(Metric, Value)) %>%
+    distinct() %>%
+    mutate(width = upper_ci - lower_ci) %>%
+    ggplot(aes(x = Method, y = width, fill = Method)) +
+    geom_boxplot(alpha = 0.5) +
+    scale_fill_manual(values = colour_map) +
+    theme_minimal(base_size = 14) +
+    labs(x = "Method", y = "95% Credible Interval Width") +
+    theme(
+        plot.title = element_text(face = "bold"),
+        panel.grid.minor = element_blank(),
+        legend.position = "top"
+    )
+
+comparison_df %>%
+    filter(Method != "NBE") %>%
+    select(-c(Metric, Value, rhat)) %>%
+    distinct() %>%
+    pivot_wider(
+        names_from = Method,
+        values_from = c(median, lower_ci, upper_ci)
+    ) %>%
+    ggplot() +
+    geom_point(aes(x = median_NPE, y = median_MCMC)) +
+    geom_smooth(aes(x = median_NPE, y = median_MCMC), method = "lm", se = TRUE) +
+    geom_smooth(aes(x = lower_ci_NPE, y = lower_ci_MCMC), method = "lm", se = TRUE) +
+    geom_smooth(aes(x = upper_ci_NPE, y = upper_ci_MCMC), method = "lm", se = TRUE)
+
+
+
+comparison_df %>%
+    filter(Method != "NBE") %>%
+    select(-c(Metric, Value, rhat)) %>%
+    distinct() %>%
+    ggplot(aes(col = Method)) +
+    geom_point(aes(x = exp(true_values), y = exp(median))) +
+    geom_point(aes(x = exp(true_values), y = exp(lower_ci)), shape = 3)
+
+comparison_df %>%
+    filter(Method != "NBE") %>%
+    select(-c(Metric, Value, rhat)) %>%
+    distinct() %>%
+    ggplot(aes(col = Method)) +
+    geom_smooth(aes(x = exp(true_values), y = exp(median))) +
+    geom_smooth(aes(x = exp(true_values), y = exp(lower_ci))) +
+    geom_smooth(aes(x = exp(true_values), y = exp(upper_ci)))
+
+
+comparison_df %>%
+    filter(Method != "NBE") %>%
+    arrange(desc(exp(median)))
+
+
+
+mcmc_nbe_comparison_df <- mcmc_df %>%
+    filter(parameters == "intercept") %>%
+    select(-parameters) %>% 
+    left_join(npe_df, by = c("dataset", "true_values")) %>%
+    left_join(nbe_df, by = "dataset")
     mutate(
         ape_mcmc = abs((exp(true_intercept) - exp(median_mcmc)) / exp(true_intercept)),
         ape_nbe = abs((exp(true_intercept) - exp(median_nbe)) / exp(true_intercept)),
         ape_npe = abs((exp(true_intercept) - exp(median_npe)) / exp(true_intercept))
     )
+
+
 
 
 mcmc_nbe_intercept_comparison_plot <- mcmc_nbe_comparison_df %>%
