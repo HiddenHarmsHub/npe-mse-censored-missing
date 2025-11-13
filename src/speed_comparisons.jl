@@ -7,12 +7,12 @@ include("mse_functions.jl")
 include("mcmc_functions.jl")
 
 
-function get_nbe_estimates(nbe_model, nbe_model_ci, test_data, slice_idx)
+@everywhere function get_nbe_estimates(nbe_model, nbe_model_ci, test_data, slice_idx)
     nbe_model(test_data[:, slice_idx])
     nbe_model_ci(test_data[:, slice_idx])
 end
 
-function run_speed_comparison(nbe_model, nbe_model_ci, npe_model, test_data, test_pars, n_lists, iterations_list, slice_idx, savepath)
+@everywhere function run_speed_comparison(nbe_model, nbe_model_ci, npe_model, test_data, test_pars, n_lists, iterations_list, slice_idx, savepath)
     nbe_time = @benchmark get_nbe_estimates(nbe_model, nbe_model_ci, test_data, slice_idx)
     out = DataFrame(
         dataset = slice_idx,
@@ -97,20 +97,24 @@ datasets_to_sample = rand(1:size(test_data, 2), n_datasets_to_sample)
 
 iterations_list = 1000 * 2 .^ collect(0:5)
 
+### TESTING
+iterations_list = iterations_list[1:3]
+datasets_to_sample = datasets_to_sample[1:4]
+
 pmap(
     slice_idx -> begin
         wid = myid()
         println("Worker $wid running speed comparison for dataset $slice_idx")
         run_speed_comparison(
-            $nbe_model,
-            $nbe_model_ci,
-            $npe_model,
-            $test_data,
-            $test_pars,
-            $n_lists,
-            $iterations_list,
+            nbe_model,
+            nbe_model_ci,
+            npe_model,
+            test_data,
+            test_pars,
+            n_lists,
+            iterations_list,
             slice_idx,
-            $speed_comparison_path
+            speed_comparison_path
         )
     end,
     datasets_to_sample
