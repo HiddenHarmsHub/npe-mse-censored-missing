@@ -1,10 +1,10 @@
 using Pkg; Pkg.activate(".")
+using Distributed, SlurmClusterManager
+addprocs(SlurmManager(); exeflags=["--threads", "1", "--project"])
 
-Pkg.add("BenchmarkTools")
-
-using BenchmarkTools, Random
-include("mse_functions.jl")
-include("mcmc_functions.jl")
+@everywhere using BenchmarkTools, Random
+@everywhere include("mse_functions.jl")
+@everywhere include("mcmc_functions.jl")
 
 
 @everywhere function get_nbe_estimates(nbe_model, nbe_model_ci, test_data, slice_idx)
