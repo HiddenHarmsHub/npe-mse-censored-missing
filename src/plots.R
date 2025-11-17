@@ -514,12 +514,162 @@ ggsave(
 
 
 
+## speed benchmarking
 
-rank_df <- read_csv(file.path("output", "rank_comparison_npe_mcmc.csv"))
+benchmark_files <- list.files(
+    path = file.path("output", "speed_comparisons"), 
+    pattern = "*.csv", 
+    full.names = TRUE
+)
 
 
-hist(rank_df$MCMC_rank)
 
+benchmark_df <- lapply(benchmark_files, function(benchmark_file) {
+    benchmark_df <- read_csv(benchmark_file, show_col_types = FALSE)
+    return(benchmark_df)
+}) %>%
+    bind_rows()
+
+
+benchmark_df %>%
+    group_by(method, iterations) %>%
+    summarise(
+        mean_time = mean(time),
+        sd_time = sd(time),
+        .groups = "drop"
+    ) %>%
+    ggplot(aes(x = iterations, y = mean_time, col = method)) +
+    geom_line(lwd = 1.5) +
+    geom_point(size = 2) +
+    labs(
+        x = "Number of Iterations",
+        y = "Mean Time (seconds)",
+        col = "Method"
+    ) +
+    scale_color_manual(values = colour_map) +
+    theme_minimal(base_size = 14) +
+    theme(
+        plot.title = element_text(face = "bold"),
+        panel.grid.minor = element_blank(),
+        legend.position = "top"
+    )
+
+benchmark_df %>%
+    group_by(method, iterations, dataset) %>%
+    summarise(
+        mean_time = mean(time),
+        sd_time = sd(time),
+        .groups = "drop"
+    ) %>%
+    ggplot(aes(x = iterations, y = mean_time, col = method)) +
+    geom_line(lwd = 1.5) +
+    geom_point(size = 2) +
+    labs(
+        x = "Number of Iterations",
+        y = "Mean Time (seconds)",
+        col = "Method"
+    ) +
+    scale_color_manual(values = colour_map) +
+    theme_minimal(base_size = 14) +
+    theme(
+        plot.title = element_text(face = "bold"),
+        panel.grid.minor = element_blank(),
+        legend.position = "top"
+    ) +
+    facet_wrap(~dataset)
+
+
+benchmark_df %>%
+    filter(method == "MCMC") %>%
+    group_by(dataset, iterations) %>%
+    mutate(run = row_number()) %>%
+    ggplot(aes(x = iterations, y = time, col = as.factor(run))) +
+    geom_line(lwd = 1.5) +
+    facet_wrap(~dataset)
+    #geom_point()
+
+benchmark_df %>%
+    filter(method == "MCMC") %>%
+    group_by(dataset, iterations) %>%
+    summarise(
+        mean_time = mean(time),
+        median_time = median(time),
+        sd_time = sd(time),
+        .groups = "drop"
+    ) %>%
+    ggplot(aes(x = iterations, y = mean_time, col = as.factor(dataset))) +
+    geom_line(lwd = 1.5)
+
+benchmark_df %>%
+    filter(method == "MCMC") %>%
+    group_by(dataset, iterations) %>%
+    summarise(
+        mean_time = mean(time),
+        median_time = median(time),
+        sd_time = sd(time),
+        .groups = "drop"
+    ) %>%
+    ggplot(aes(x = iterations, y = median_time, col = as.factor(dataset))) +
+    geom_line(lwd = 1.5)
+
+
+speed_comparison_plot <- benchmark_df %>%
+    filter(method %in% c("NPE", "MCMC")) %>%
+    group_by(method, iterations) %>%
+    summarise(
+        mean_time = mean(time),
+        sd_time = sd(time),
+        .groups = "drop"
+    ) %>%
+    ggplot(aes(x = iterations, y = mean_time, col = method)) +
+    geom_line(lwd = 1.5) +
+    geom_hline(
+        data = benchmark_df %>% 
+            filter(method == "NBE") %>% 
+            summarise(mean_time = mean(time)) %>%
+            mutate(method = "NBE"),
+        aes(yintercept = mean_time, col = method),
+        lwd = 1.5
+    ) +
+    scale_color_manual(values = colour_map) +
+    scale_y_log10() +
+    scale_x_log10() +
+    labs(
+        x = "Number of Iterations",
+        y = "Mean Time (seconds)",
+        col = "Method"
+    ) +
+    theme_minimal(base_size = 14) +
+    theme(
+        plot.title = element_text(face = "bold"),
+        panel.grid.minor = element_blank(),
+        legend.position = "top"
+    )
+
+ggsave(
+    filename = file.path("output", "figures", "speed_comparison.png"), 
+    plot = last_plot(), width = 7, height = 5, dpi = 300
+)
+
+
+
+
+benchmark_df %>%
+    group_by(method, iterations) %>%
+    summarise(
+        mean_time = mean(time),
+        sd_time = sd(time),
+        .groups = "drop"
+    ) %>%
+    group_by(method) %>%
+    group_modify(~ {
+        lm_fit <- lm(mean_time ~ iterations - 1, data = .x)
+        tibble(
+            slope = coef(lm_fit)[1],
+            r_squared = summary(lm_fit)$r.squared
+        )
+    }) %>%
+    mutate(slope_ms = slope * 1000)
 
 
 

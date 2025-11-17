@@ -22,7 +22,7 @@ end
     width = 256
     n_hidden = 3
     train_size = 10000
-    train_nbe_function() = train_model_mlp(
+    train_nbe() = train_model_mlp(
         n_lists, 
         width, 
         n_hidden, 
@@ -34,7 +34,9 @@ end
         intercept_dist = Uniform(1, 10)
     )
 
-    train_npe() = train_npe(
+    encoding_dim = 128
+
+    train_npe_fixed() = train_npe(
         n_lists,
         width,
         n_hidden,
@@ -46,13 +48,13 @@ end
         savepath = nothing
     )
 
-    train_nbe_function() ## warmup
-    train_npe_function() ## warmup
-    n_runs = 10
+    train_nbe() ## warmup
+    train_npe_fixed() ## warmup
+    n_runs = 1
     train_df = DataFrame()
     for _ in 1:n_runs
-        push!(train_df, (method = "NBE", train_time = time_function(train_nbe_function, ())))
-        push!(train_df, (method = "NPE", train_time = time_function(train_npe_function, ())))
+        push!(train_df, (method = "NBE", train_time = time_function(train_nbe, ())))
+        push!(train_df, (method = "NPE", train_time = time_function(train_npe_fixed, ())))
     end
     mkpath(joinpath("output", "speed_comparisons"))
     CSV.write(
