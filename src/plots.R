@@ -685,14 +685,17 @@ ggsave(
 ## silverman analysis
 silverman_nbe <- read_csv(
    file.path("output", "real_data_analysis", "silverman_nbe_parameter_estimates.csv"),
+   show_col_types = FALSE
 )
 
 silverman_npe_samples <- read_csv(
-    file.path("output", "real_data_analysis", "silverman_npe_posterior_samples.csv")
+    file.path("output", "real_data_analysis", "silverman_npe_posterior_samples.csv"),
+    show_col_types = FALSE
 )
 
 silverman_mcmc_samples <- read_csv(
-    file.path("output", "real_data_analysis", "silverman_mcmc_posterior_samples.csv")
+    file.path("output", "real_data_analysis", "silverman_mcmc_posterior_samples.csv"),
+    show_col_types = FALSE
 )
 
 silverman_mcmc_long <- silverman_mcmc_samples %>%
@@ -733,7 +736,12 @@ silverman_nbe_long <- silverman_nbe %>%
 silverman_combined_samples <- bind_rows(silverman_mcmc_long, silverman_npe_long)
 
 ## also compute frequentist estimates for vertical lines
-raw_data_silverman <- read_csv(file.path("data", "silverman_5.csv")) %>% 
+raw_data_silverman <- read_csv(
+    file.path("data", "silverman_5.csv"),
+    show_col_types = FALSE
+)
+
+expanded_data_silver <- raw_data_silverman %>% 
     mutate(
         count = as.integer(count),
         S1 = as.integer(str_detect(group, "1")),
@@ -747,7 +755,7 @@ raw_data_silverman <- read_csv(file.path("data", "silverman_5.csv")) %>%
 silverman_data <- expand.grid(replicate(5, 0:1, simplify = FALSE)) %>%
     setNames(paste0("S", 1:5)) %>%
     filter(rowSums(.) > 0) %>%
-    left_join(raw_data_silverman, by = c("S1", "S2", "S3", "S4", "S5")) %>%
+    left_join(expanded_data_silver, by = c("S1", "S2", "S3", "S4", "S5")) %>%
     mutate(count = ifelse(is.na(count), 0, count))
 
 interactions <- function(x) {
@@ -766,7 +774,6 @@ full_formula <- function(x) {
     formula_str <- paste0("count ~ ", paste(main_terms,interaction_terms, sep = " + "))
     return(formula_str)
 }
-
 
 fit_glm <- glm(
     formula = as.formula(full_formula(1:5)),
@@ -802,28 +809,34 @@ frequentist_df <- data.frame(
         Parameter = recode(Parameter, !!!create_parameter_mapping(5))
     )
 
-
 silverman_estimate_comparison <- silverman_combined_samples %>%
     ggplot(aes(x = Value, fill = Method)) +
     geom_density(alpha = 0.6) +
     geom_vline(
         data = silverman_nbe_long %>% filter(Parameter != "alpha"),
-        aes(xintercept = Value),
+        aes(xintercept = Value, linetype = "NBE"),
         linewidth = 1
     ) +
     geom_vline(
         data = frequentist_df %>% filter(Parameter != "alpha"),
-        aes(xintercept = Value),
-        color = "green",
+        aes(xintercept = Value, linetype = "MLE"),
+        col = "orange",
         linewidth = 1
     ) +
     facet_wrap(~Parameter, scales = "free") +
     scale_fill_manual(values = colour_map) +
+    scale_linetype_manual(
+        name = "Point Estimates",
+        values = c("NBE" = "solid", "MLE" = "solid"),
+        guide = guide_legend(override.aes = list(
+            color = c("NBE" = "black", "MLE" = "orange")
+        ))
+    ) +
     theme_minimal(base_size = 14) +
     labs(
         x = "Parameter Value",
         y = "Density",
-        fill = "Method"
+        fill = "Posterior Distributions"
     ) +
     theme(
         legend.position = "top",
@@ -835,3 +848,48 @@ ggsave(
     filename = file.path("output", "figures", "silverman_parameter_estimate_comparison.png"), 
     plot = silverman_estimate_comparison, width = 10, height = 8, dpi = 300
 )
+
+## also plot model assessment
+
+ppd_npe_df <- read_csv(
+    file.path("output", "real_data_analysis", "silverman_npe_posterior_predictive.csv"),
+    show_col_types = FALSE
+)
+
+silverman_counts <- raw_data_silverman %>%
+    mutate(group = paste0("N_", group)) %>%
+    right_join(
+        ppd_npe_df %>% 
+            pivot_longer(everything(), names_to = "group") %>% 
+            distinct(group),
+        by = "group"
+    ) %>%
+    mutate(count = replace_na(count, 0))
+
+ppd_silverman <- ppd_npe_df %>%
+    pivot_longer(
+        cols = everything(),
+        names_to = "group",
+        values_to = "predicted_count"
+    ) %>%
+    ggplot(aes(x = predicted_count)) +
+    geom_histogram(fill = "lightblue", color = "black", alpha = 0.7) +
+    geom_vline(
+        data = silverman_counts,
+        aes(xintercept = count),
+        color = "red",
+        size = 1
+    ) +
+    facet_wrap(~group, ncol = 5, scales = "free") +
+    labs(
+        x = "Count",
+        y = "Frequency"
+    )
+
+
+ggsave(
+    filename = file.path("output", "figures", "silverman_ppd_npe.png"), 
+    plot = ppd_silverman, width = 10, height = 8, dpi = 300
+)
+
+
