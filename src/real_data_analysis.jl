@@ -213,7 +213,7 @@ npe_model_king = load_model_npe(
     npe_models_path
 )
 
-posterior_samples_npe_king = bounded_sample(
+posterior_samples_king_npe = bounded_sample(
     sampleposterior(npe_model_king, reshape(king_data, :, 1), n_samples), 
     1.0, 
     10.0
@@ -221,7 +221,7 @@ posterior_samples_npe_king = bounded_sample(
 
 CSV.write(
     joinpath(output_path, "king_npe_posterior_samples.csv"),
-    DataFrame(posterior_samples_npe_king', param_names(4))
+    DataFrame(posterior_samples_king_npe', param_names(4))
 )
 
 ## compare with mcmc
@@ -258,5 +258,12 @@ CSV.write(
 )
 
 
+## also model assesmment
 
 
+ppd_king = hcat([simulate_data(x, 1, censoring_lower=0, censoring_upper=0, log_transform = false) for x in eachcol(posterior_samples_king_npe)]...)
+ppd_king_df = DataFrame(ppd_king', ["N_$x" for x in replace.(enumerate_all_combinations(4), "," => "")]) 
+CSV.write(
+    joinpath(output_path, "king_npe_posterior_predictive.csv"),
+    ppd_king_df
+)
