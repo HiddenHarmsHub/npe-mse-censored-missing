@@ -17,6 +17,50 @@ end
     return (time_ns() - start) / 1.0e9
 end
 
+@everywhere function train_time_comparison()
+    n_lists = 5
+    width = 256
+    n_hidden = 3
+    train_size = 10000
+    train_nbe_function() = train_model_mlp(
+        n_lists, 
+        width, 
+        n_hidden, 
+        train_size, 
+        m = 1, 
+        censoring_lower = 0, 
+        censoring_upper = 10, 
+        savepath = nothing, 
+        intercept_dist = Uniform(1, 10)
+    )
+
+    train_npe() = train_npe(
+        n_lists,
+        width,
+        n_hidden,
+        encoding_dim,
+        train_size,
+        m = 1,
+        censoring_lower = 0,
+        censoring_upper = 10,
+        savepath = nothing
+    )
+
+    train_nbe_function() ## warmup
+    train_npe_function() ## warmup
+    n_runs = 10
+    train_df = DataFrame()
+    for _ in 1:n_runs
+        push!(train_df, (method = "NBE", train_time = time_function(train_nbe_function, ())))
+        push!(train_df, (method = "NPE", train_time = time_function(train_npe_function, ())))
+    end
+    mkpath(joinpath("output", "speed_comparisons"))
+    CSV.write(
+        joinpath("output", "speed_comparisons", "train_time_comparison.csv"),
+        DataFrame(train_time = train_times)
+    )
+end
+
 @everywhere function run_speed_comparison(slice_idx)
     n_lists = 5
     n_runs = 10
@@ -138,3 +182,6 @@ end
 pmap(run_speed_comparison, datasets_to_sample)
 
 
+## also run train time comparison
+
+train_time_comparison()
