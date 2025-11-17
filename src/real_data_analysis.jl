@@ -11,8 +11,16 @@ silverman_data = Float32.(log.(load_silverman_data() .+ 1))
 
 ## First infer using NBE
 
-function MAE_df(n_lists, censoring_lower, censoring_upper)
-    intercept_df = DataFrame(CSV.File(joinpath("output", "intercept_estimate_comparison.csv")))
+intercept_files = readdir(joinpath("output", "intercept_estimates"))
+
+function get_intercept_df(intercept_files)
+    map(intercept_files) do intercept_file
+        DataFrame(CSV.File(joinpath("output", "intercept_estimates", intercept_file)))
+    end |> (x -> vcat(x...))
+end
+
+function MAE_df(n_lists, censoring_lower, censoring_upper, intercept_files)
+    intercept_df = get_intercept_df(intercept_files)
     filtered_df = filter(x -> x.n_lists == n_lists .&& x.censoring_lower == censoring_lower .&& x.censoring_upper == censoring_upper, intercept_df)
     gdf = groupby(filtered_df, [:width, :n_hidden, :train_size])
     summary = combine(gdf, 
@@ -22,8 +30,10 @@ function MAE_df(n_lists, censoring_lower, censoring_upper)
     return summary
 end
 
+filter(x -> x.censoring_upper == 4, intercept_df)
+
 ## Find the best architectures for 5 lists
-MAE_5_df = MAE_df(5, 0, 0)
+MAE_5_df = MAE_df(5, 0, 0, intercept_files)
 best_NBE_5 = MAE_5_df[findmin(MAE_5_df.MAE_NBE)[2], :]
 best_NPE_5 = MAE_5_df[findmin(MAE_5_df.MAE_NPE)[2], :]
 
@@ -50,7 +60,6 @@ ci_silverman = load_model_nbe(
 
 silverman_par_estimates = model_silverman(silverman_data)
 silverman_par_cis = ci_silverman(silverman_data)
-
 
 silverman_NBE_estimates = DataFrame(
     parameter = param_names(5),
@@ -96,7 +105,6 @@ CSV.write(
     joinpath(output_path, "silverman_npe_posterior_samples.csv"),
     DataFrame(posterior_samples_silverman_npe', param_names(5))
 )
-
 
 ##  MCMC on Silverman data
 
@@ -154,14 +162,14 @@ CSV.write(
 king_data = load_king_data()
 
 ## Find the best architectures for 5 lists, 1-4 censoring
-MAE_4_df = MAE_df(5, 1, 4)
+MAE_4_df = MAE_df(4, 1, 4, intercept_files)
 best_NBE_4 = MAE_5_df[findmin(MAE_5_df.MAE_NBE)[2], :]
 best_NPE_4 = MAE_5_df[findmin(MAE_5_df.MAE_NPE)[2], :]
 
 model_king = load_model_nbe(
     n_lists = 4, 
-    width = 128,
-    n_hidden = 3,
+    width = best_NBE_4.width,
+    n_hidden = best_NBE_4.n_hidden,
     train_size = 10000, 
     censoring_lower = 1,
     censoring_upper = 4,
@@ -170,8 +178,8 @@ model_king = load_model_nbe(
 
 ci_king = load_model_nbe(
     n_lists = 4, 
-    width = 128,
-    n_hidden = 3,
+    width = best_NBE_4.width,
+    n_hidden = best_NBE_4.n_hidden,
     train_size = 10000, 
     censoring_lower = 1,
     censoring_upper = 4,
@@ -196,8 +204,8 @@ CSV.write(
 
 npe_model_king = load_model_npe(
     4, 
-    128, 
-    2,
+    best_NPE_4.width, 
+    best_NPE_4.n_hidden,
     10000,
     1, 
     4, 
