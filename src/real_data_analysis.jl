@@ -227,7 +227,7 @@ CSV.write(
 ## compare with mcmc
 king_data_reduced = king_data[1:15]
 input_counts = Int.(ifelse.(king_data_reduced .== -1.0, -1.0, floor.(exp.(king_data_reduced) .- 1)))
-X = one_hot_encode_parameters(5)
+X = one_hot_encode_parameters(4)
 
 intercept_dist = Uniform(1, 10)
 beta_dist = Normal(0, 4)

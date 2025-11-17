@@ -6,6 +6,73 @@ colour_map <- c(
     "MCMC" = "#b2df8a"
 )
 
+## Helper functions translated from mse_functions.jl
+
+enumerate_two_digit_numbers <- function(K) {
+    numbers <- list()
+    for (i in 1:(K - 1)) {
+        for (j in (i + 1):K) {
+            numbers <- c(numbers, list(c(i, j)))
+        }
+    }
+    return(numbers)
+}
+
+enumerate_all_combinations <- function(K) {
+    combos <- character()
+    for (n in 1:K) {
+        for (c in combn(1:K, n, simplify = FALSE)) {
+            combos <- c(combos, paste(c, collapse = ","))
+        }
+    }
+    return(combos)
+}
+
+compute_digit_pairs <- function(n, filter_terms = NULL) {
+    n_split <- strsplit(n, ",")[[1]]
+    if (length(n_split) == 1) {
+        return(list(digits = as.integer(n), pairs = list()))
+    }
+    digits <- as.integer(n_split)
+    pairs <- combn(digits, 2, simplify = FALSE)
+    if (!is.null(filter_terms)) {
+        pairs <- Filter(function(x) x %in% filter_terms, pairs)
+    }
+    return(list(digits = digits, pairs = pairs))
+}
+
+one_hot_encode_parameters <- function(K) {
+    n_gamma <- choose(K, 2)
+    n_pars <- 1 + K + n_gamma
+    one_hot_matrix <- matrix(0, nrow = 2^K - 1, ncol = n_pars)
+    
+    lists <- enumerate_all_combinations(K)
+    two_digit_numbers <- enumerate_two_digit_numbers(K)
+    
+    # Create mapping from two-digit pairs to gamma indices
+    gamma_map <- setNames(1:n_gamma, sapply(two_digit_numbers, paste, collapse = ","))
+    
+    for (i in seq_along(lists)) {
+        list <- lists[i]
+        result <- compute_digit_pairs(list)
+        digits <- result$digits
+        digit_pairs <- result$pairs
+        
+        one_hot_matrix[i, 1] <- 1  # Intercept
+        
+        for (digit in digits) {
+            one_hot_matrix[i, 1 + digit] <- 1
+        }
+        
+        for (pair in digit_pairs) {
+            pair_key <- paste(pair, collapse = ",")
+            one_hot_matrix[i, 1 + K + gamma_map[pair_key]] <- 1
+        }
+    }
+    
+    return(one_hot_matrix)
+}
+
 ape_df <- read_csv(file.path("output", "intercept_estimate_comparison.csv")) %>%
     pivot_longer(
         cols = c(APE_NBE, APE_NPE),
@@ -800,7 +867,7 @@ create_parameter_mapping <- function(n_lists) {
     return(mapping)
 }
 
-frequentist_df <- data.frame(
+silverman_frequentist_df <- data.frame(
     Parameter = names(fit_glm$coefficients),
     Value = as.numeric(fit_glm$coefficients)
 ) %>%
@@ -818,7 +885,7 @@ silverman_estimate_comparison <- silverman_combined_samples %>%
         linewidth = 1
     ) +
     geom_vline(
-        data = frequentist_df %>% filter(Parameter != "alpha"),
+        data = silverman_frequentist_df %>% filter(Parameter != "alpha"),
         aes(xintercept = Value, linetype = "MLE"),
         col = "orange",
         linewidth = 1
@@ -851,7 +918,7 @@ ggsave(
 
 ## also plot model assessment
 
-ppd_npe_df <- read_csv(
+ppd_silverman_npe_df <- read_csv(
     file.path("output", "real_data_analysis", "silverman_npe_posterior_predictive.csv"),
     show_col_types = FALSE
 )
@@ -859,14 +926,14 @@ ppd_npe_df <- read_csv(
 silverman_counts <- raw_data_silverman %>%
     mutate(group = paste0("N_", group)) %>%
     right_join(
-        ppd_npe_df %>% 
+        ppd_silverman_npe_df %>% 
             pivot_longer(everything(), names_to = "group") %>% 
             distinct(group),
         by = "group"
     ) %>%
     mutate(count = replace_na(count, 0))
 
-ppd_silverman <- ppd_npe_df %>%
+ppd_silverman <- ppd_silverman_npe_df %>%
     pivot_longer(
         cols = everything(),
         names_to = "group",
@@ -893,3 +960,154 @@ ggsave(
 )
 
 
+
+
+
+### analyse king data
+
+raw_data_king <- read_csv(
+    file.path("data", "king.csv"),
+    show_col_types = FALSE
+)
+
+ppd_king_npe_df <- read_csv(
+    file.path("output", "real_data_analysis", "king_npe_posterior_predictive.csv"),
+    show_col_types = FALSE
+)
+
+king_data <- raw_data_king %>%
+    mutate(count = ifelse(count == "missing", "-1", count)) %>%
+    mutate(count = as.integer(count))
+
+king_loglikelihood <- function(king_data, X, pars) {
+    logliks <- numeric(nrow(king_data))
+    rates <- exp(X %*% pars)
+    logliks <- ifelse(
+        king_data$count == -1,
+        dpois(1:4, lambda = rates, log = TRUE),
+        dpois(king_data$count, lambda = rates, log = TRUE)
+    )
+    return(sum(logliks))
+}
+
+
+X_king <- one_hot_encode_parameters(4)
+pars_init <- c(3.0, -2.0, 0.5, 0.3, 0.2, 0.1, 0.05, 0.04, 0.03, 0.02, 0.01)
+
+
+optimised <- optim(
+    par = pars_init,
+    fn = function(pars) -king_loglikelihood(king_data, X_king, pars),
+    method = "BFGS"
+)
+
+
+
+king_nbe <- read_csv(
+   file.path("output", "real_data_analysis", "king_nbe_parameter_estimates.csv"),
+   show_col_types = FALSE
+)
+
+king_npe_samples <- read_csv(
+    file.path("output", "real_data_analysis", "king_npe_posterior_samples.csv"),
+    show_col_types = FALSE
+)
+
+king_mcmc_samples <- read_csv(
+    file.path("output", "real_data_analysis", "king_mcmc_posterior_samples.csv"),
+    show_col_types = FALSE
+)
+
+king_mcmc_long <- king_mcmc_samples %>%
+    select(matches("alpha|beta|gamma")) %>%
+    pivot_longer(
+        cols = everything(),
+        names_to = "Parameter",
+        values_to = "Value"
+    ) %>%
+    mutate(
+        Method = "MCMC",
+        Parameter = str_replace_all(Parameter, "\\[", "_"),
+        Parameter = str_replace_all(Parameter, "\\]", "")
+    )
+
+king_npe_long <- king_npe_samples %>%
+    select(matches("alpha|beta|gamma")) %>%
+    pivot_longer(
+        cols = everything(),
+        names_to = "Parameter",
+        values_to = "Value"
+    ) %>%
+    mutate(Method = "NPE")
+
+king_nbe_long <- king_nbe %>%
+    pivot_longer(
+        cols = -parameter,
+        names_to = "Statistic",
+        values_to = "Value"
+    ) %>%
+    filter(Statistic == "estimate") %>%
+    mutate(
+        Parameter = parameter,
+        Method = "NBE"
+    ) %>%
+    select(Parameter, Value, Method)
+
+king_combined_samples <- bind_rows(king_mcmc_long, king_npe_long)
+
+two_digit_numbers <- enumerate_two_digit_numbers(4)
+
+gamma_names <- sapply(two_digit_numbers, function(x) {
+    paste0("gamma_", x[1], x[2])
+})
+
+par_names <- c("alpha", paste0("beta_", 1:4), gamma_names)
+
+king_frequentist_df <- data.frame(
+    Parameter = par_names,
+    Value = as.numeric(optimised$par)
+) %>%
+    mutate(
+        Method = "Frequentist",
+        Parameter = recode(Parameter, !!!create_parameter_mapping(5))
+    )
+
+king_estimate_comparison <- king_combined_samples %>%
+    ggplot(aes(x = Value, fill = Method)) +
+    geom_density(alpha = 0.6) +
+    geom_vline(
+        data = king_nbe_long %>% filter(Parameter != "alpha"),
+        aes(xintercept = Value, linetype = "NBE"),
+        linewidth = 1
+    ) +
+    geom_vline(
+        data = king_frequentist_df %>% filter(Parameter != "alpha"),
+        aes(xintercept = Value, linetype = "MLE"),
+        col = "orange",
+        linewidth = 1
+    ) +
+    facet_wrap(~Parameter, scales = "free") +
+    scale_fill_manual(values = colour_map) +
+    scale_linetype_manual(
+        name = "Point Estimates",
+        values = c("NBE" = "solid", "MLE" = "solid"),
+        guide = guide_legend(override.aes = list(
+            color = c("NBE" = "black", "MLE" = "orange")
+        ))
+    ) +
+    theme_minimal(base_size = 14) +
+    labs(
+        x = "Parameter Value",
+        y = "Density",
+        fill = "Posterior Distributions"
+    ) +
+    theme(
+        legend.position = "top",
+        panel.spacing = grid::unit(2, "lines")
+    )
+
+
+ggsave(
+    filename = file.path("output", "figures", "king_parameter_estimate_comparison.png"), 
+    plot = king_estimate_comparison, width = 10, height = 8, dpi = 300
+)
