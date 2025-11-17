@@ -13,5 +13,4 @@ output/npe_samples/
 output/npe_summary/
 output/intercept_estimates/
 slurm_output/
-output/real_data_analysis/
 output/speed_comparisons/
