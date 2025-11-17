@@ -531,88 +531,6 @@ benchmark_df <- lapply(benchmark_files, function(benchmark_file) {
     bind_rows()
 
 
-benchmark_df %>%
-    group_by(method, iterations) %>%
-    summarise(
-        mean_time = mean(time),
-        sd_time = sd(time),
-        .groups = "drop"
-    ) %>%
-    ggplot(aes(x = iterations, y = mean_time, col = method)) +
-    geom_line(lwd = 1.5) +
-    geom_point(size = 2) +
-    labs(
-        x = "Number of Iterations",
-        y = "Mean Time (seconds)",
-        col = "Method"
-    ) +
-    scale_color_manual(values = colour_map) +
-    theme_minimal(base_size = 14) +
-    theme(
-        plot.title = element_text(face = "bold"),
-        panel.grid.minor = element_blank(),
-        legend.position = "top"
-    )
-
-benchmark_df %>%
-    group_by(method, iterations, dataset) %>%
-    summarise(
-        mean_time = mean(time),
-        sd_time = sd(time),
-        .groups = "drop"
-    ) %>%
-    ggplot(aes(x = iterations, y = mean_time, col = method)) +
-    geom_line(lwd = 1.5) +
-    geom_point(size = 2) +
-    labs(
-        x = "Number of Iterations",
-        y = "Mean Time (seconds)",
-        col = "Method"
-    ) +
-    scale_color_manual(values = colour_map) +
-    theme_minimal(base_size = 14) +
-    theme(
-        plot.title = element_text(face = "bold"),
-        panel.grid.minor = element_blank(),
-        legend.position = "top"
-    ) +
-    facet_wrap(~dataset)
-
-
-benchmark_df %>%
-    filter(method == "MCMC") %>%
-    group_by(dataset, iterations) %>%
-    mutate(run = row_number()) %>%
-    ggplot(aes(x = iterations, y = time, col = as.factor(run))) +
-    geom_line(lwd = 1.5) +
-    facet_wrap(~dataset)
-    #geom_point()
-
-benchmark_df %>%
-    filter(method == "MCMC") %>%
-    group_by(dataset, iterations) %>%
-    summarise(
-        mean_time = mean(time),
-        median_time = median(time),
-        sd_time = sd(time),
-        .groups = "drop"
-    ) %>%
-    ggplot(aes(x = iterations, y = mean_time, col = as.factor(dataset))) +
-    geom_line(lwd = 1.5)
-
-benchmark_df %>%
-    filter(method == "MCMC") %>%
-    group_by(dataset, iterations) %>%
-    summarise(
-        mean_time = mean(time),
-        median_time = median(time),
-        sd_time = sd(time),
-        .groups = "drop"
-    ) %>%
-    ggplot(aes(x = iterations, y = median_time, col = as.factor(dataset))) +
-    geom_line(lwd = 1.5)
-
-
 speed_comparison_plot <- benchmark_df %>%
     filter(method %in% c("NPE", "MCMC")) %>%
     group_by(method, iterations) %>%
@@ -652,9 +570,7 @@ ggsave(
 )
 
 
-
-
-benchmark_df %>%
+lm_comparison_speed <- benchmark_df %>%
     group_by(method, iterations) %>%
     summarise(
         mean_time = mean(time),
@@ -674,107 +590,14 @@ benchmark_df %>%
 
 
 
-
-
-
-
-comparison_df %>%
-    select(-c(Metric, Value, rhat)) %>%
-    distinct() %>%
-    mutate(width = exp(upper_ci) - exp(lower_ci)) %>%
-    filter(Method != "NBE") %>%
-    select(-c(true_values, median, lower_ci, upper_ci)) %>% 
-    pivot_wider(
-        names_from = Method,
-        values_from = width
-    ) %>%
-    ggplot(aes(x = NPE, y = MCMC)) +
+ape_hiddenpop_points <- comparison_df %>%
+    filter(Metric == "ape") %>%
+    select(-Metric) %>%
+    mutate(APE = abs((exp(median) - exp(true_values))) / exp(true_values)) %>%
+    ggplot(aes(x = exp(true_values), y = log(APE), col = Method)) +
     geom_point() +
-    geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "red") 
-
-
-comparison_df %>%
-    select(-c(Metric, Value)) %>%
-    distinct() %>%
-    mutate(width = upper_ci - lower_ci) %>%
-    ggplot(aes(x = Method, y = width, fill = Method)) +
-    geom_boxplot(alpha = 0.5) +
-    scale_fill_manual(values = colour_map) +
-    theme_minimal(base_size = 14) +
-    labs(x = "Method", y = "95% Credible Interval Width") +
-    theme(
-        plot.title = element_text(face = "bold"),
-        panel.grid.minor = element_blank(),
-        legend.position = "top"
-    )
-
-comparison_df %>%
-    filter(Method != "NBE") %>%
-    select(-c(Metric, Value, rhat)) %>%
-    distinct() %>%
-    pivot_wider(
-        names_from = Method,
-        values_from = c(median, lower_ci, upper_ci)
-    ) %>%
-    ggplot() +
-    geom_point(aes(x = median_NPE, y = median_MCMC)) +
-    geom_smooth(aes(x = median_NPE, y = median_MCMC), method = "lm", se = TRUE) +
-    geom_smooth(aes(x = lower_ci_NPE, y = lower_ci_MCMC), method = "lm", se = TRUE) +
-    geom_smooth(aes(x = upper_ci_NPE, y = upper_ci_MCMC), method = "lm", se = TRUE)
-
-
-
-comparison_df %>%
-    filter(Method != "NBE") %>%
-    select(-c(Metric, Value, rhat)) %>%
-    distinct() %>%
-    ggplot(aes(col = Method)) +
-    geom_point(aes(x = exp(true_values), y = exp(median))) +
-    geom_point(aes(x = exp(true_values), y = exp(lower_ci)), shape = 3)
-
-comparison_df %>%
-    filter(Method != "NBE") %>%
-    select(-c(Metric, Value, rhat)) %>%
-    distinct() %>%
-    ggplot(aes(col = Method)) +
-    geom_smooth(aes(x = exp(true_values), y = exp(median))) +
-    geom_smooth(aes(x = exp(true_values), y = exp(lower_ci))) +
-    geom_smooth(aes(x = exp(true_values), y = exp(upper_ci)))
-
-
-comparison_df %>%
-    filter(Method != "NBE") %>%
-    arrange(desc(exp(median)))
-
-
-
-mcmc_nbe_comparison_df <- mcmc_df %>%
-    filter(parameters == "intercept") %>%
-    select(-parameters) %>% 
-    left_join(npe_df, by = c("dataset", "true_values")) %>%
-    left_join(nbe_df, by = "dataset")
-    mutate(
-        ape_mcmc = abs((exp(true_intercept) - exp(median_mcmc)) / exp(true_intercept)),
-        ape_nbe = abs((exp(true_intercept) - exp(median_nbe)) / exp(true_intercept)),
-        ape_npe = abs((exp(true_intercept) - exp(median_npe)) / exp(true_intercept))
-    )
-
-
-
-
-mcmc_nbe_intercept_comparison_plot <- mcmc_nbe_comparison_df %>%
-    filter(rhat <= 1.01) %>%
-    pivot_longer(
-        cols = c(ape_mcmc, ape_nbe),
-        names_to = "Method",
-        values_to = "APE"
-    ) %>%
-    mutate(Method = recode(Method, "ape_mcmc" = "MCMC", "ape_nbe" = "NBE")) %>%
-    ggplot(aes(x = exp(true_intercept), y = log(APE), col = Method)) +
-    geom_point() +
-    geom_smooth(method = "lm", se = TRUE) +
     labs(
-        x = expression("True exp" * alpha),
+        x = "True Hidden Population Size",
         y = "Log APE",
     ) +
     theme_minimal(base_size = 14) +
@@ -782,12 +605,35 @@ mcmc_nbe_intercept_comparison_plot <- mcmc_nbe_comparison_df %>%
         plot.title = element_text(face = "bold"),
         panel.grid.minor = element_blank(),
         legend.position = "top"
-    )
+    ) +
+    scale_color_manual(values = colour_map)
+
+ape_hiddenpop_lm <- comparison_df %>%
+    filter(Metric == "ape") %>%
+    select(-Metric) %>%
+    mutate(APE = abs((exp(median) - exp(true_values))) / exp(true_values)) %>%
+    ggplot(aes(x = exp(true_values), y = log(APE), col = Method)) +
+    geom_smooth(method = "lm", se = TRUE) +
+    labs(
+        x = "True Hidden Population Size",
+        y = "Log APE",
+    ) +
+    theme_minimal(base_size = 14) +
+    theme(
+        plot.title = element_text(face = "bold"),
+        panel.grid.minor = element_blank(),
+        legend.position = "top"
+    ) +
+    scale_color_manual(values = colour_map)
 
 ggsave(
-    filename = file.path("output", "figures", "mcmc_nbe_intercept_comparison.png"), 
-    plot = mcmc_nbe_intercept_comparison_plot, width = 7, height = 5, dpi = 300
+    filename = file.path("output", "figures", "ape_hiddenpop_combined.png"), 
+    plot = gridExtra::grid.arrange(ape_hiddenpop_points, ape_hiddenpop_lm, ncol = 2), 
+    width = 14, height = 6, dpi = 300
 )
+
+
+
 
 extract_main_lists <- function(idx, test_data) {
     out <- data.frame(t(floor(exp(test_data[1:15, idx] - 1))))

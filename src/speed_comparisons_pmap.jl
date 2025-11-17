@@ -50,7 +50,7 @@ end
 
     train_nbe() ## warmup
     train_npe_fixed() ## warmup
-    n_runs = 1
+    n_runs = 10
     train_df = DataFrame()
     for _ in 1:n_runs
         push!(train_df, (method = "NBE", train_time = time_function(train_nbe, ())))
@@ -59,7 +59,7 @@ end
     mkpath(joinpath("output", "speed_comparisons"))
     CSV.write(
         joinpath("output", "speed_comparisons", "train_time_comparison.csv"),
-        DataFrame(train_time = train_times)
+        train_df
     )
 end
 
