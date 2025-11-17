@@ -14,3 +14,4 @@ output/npe_summary/
 output/intercept_estimates/
 slurm_output/
 output/speed_comparisons/
+output/intercept_estimate_comparison.csv
