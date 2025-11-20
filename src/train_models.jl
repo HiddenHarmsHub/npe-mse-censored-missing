@@ -102,55 +102,61 @@ end
 
 println("Models to train after filtering: ", length(grid_nbe))
 
-## First train regular models
-pmap(
-    model -> begin
-        wid = myid()
-        println("Worker $wid running with parameters: list_size=$(model[1]), width=$(model[2]), n_hidden=$(model[3]), train_size=$(model[4]), censoring_lower=$(model[5]) censoring_upper=$(model[6]), m=$(model[7])")
-        train_model_mlp(
-            model[1],
-            model[2],
-            model[3], 
-            model[4], 
-            censoring_lower = model[5],
-            censoring_upper = model[6],
-            m = model[7],
-            savepath = output_path_nbe
-        )
-    end,
-    grid_nbe
-)
-
-println("Finished training regular models. Now training NPE models...")
-
-## Now train NPE models
-grid_npe = unique(vcat(grid_lists, grid_neurons, grid_censoring, grid_hidden, grid_4, grid_5, grid_6))
-
+## Train both regular and NPE models in a single pmap
 output_path_npe = joinpath("output", "models_npe")
 mkpath(output_path_npe)
 
 encoding_dim = 128
 
+grid_npe = unique(vcat(grid_lists, grid_neurons, grid_censoring, grid_hidden, grid_4, grid_5, grid_6))
+
 if !overwrite_models
     grid_npe = filter(model -> !isfile(joinpath(output_path_npe, "model_$(model[1])_$(model[2])_$(model[3])_$(encoding_dim)_$(model[4])_$(model[5])_$(model[6])_$(model[7]).bson")), grid_npe)
 end
 
-pmap(
-    model -> begin
-        wid = myid()
-        println("Worker $wid running with parameters: list_size=$(model[1]), width=$(model[2]), n_hidden=$(model[3]), train_size=$(model[4]), censoring_lower=$(model[5]) censoring_upper=$(model[6]), m=$(model[7])")
-        train_npe(
-            model[1],
-            model[2],
-            model[3], 
-            encoding_dim,
-            model[4], 
-            censoring_lower = model[5],
-            censoring_upper = model[6],
-            m = model[7],
-            savepath = output_path_npe
-        )
-    end,
-    grid_npe
+# Combine both model types into a single grid with type identifier
+combined_grid = vcat(
+    [(model..., "nbe") for model in grid_nbe],
+    [(model..., "npe") for model in grid_npe]
 )
+
+println("Total combined models to train: ", length(combined_grid))
+
+pmap(
+    task -> begin
+        model = task[1:end-1]
+        model_type = task[end]
+        wid = myid()
+        
+        if model_type == "nbe"
+            println("Worker $wid training NBE with parameters: list_size=$(model[1]), width=$(model[2]), n_hidden=$(model[3]), train_size=$(model[4]), censoring_lower=$(model[5]) censoring_upper=$(model[6]), m=$(model[7])")
+            train_model_mlp(
+                model[1],
+                model[2],
+                model[3], 
+                model[4], 
+                censoring_lower = model[5],
+                censoring_upper = model[6],
+                m = model[7],
+                savepath = output_path_nbe
+            )
+        else  # "npe"
+            println("Worker $wid training NPE with parameters: list_size=$(model[1]), width=$(model[2]), n_hidden=$(model[3]), train_size=$(model[4]), censoring_lower=$(model[5]) censoring_upper=$(model[6]), m=$(model[7])")
+            train_npe(
+                model[1],
+                model[2],
+                model[3], 
+                encoding_dim,
+                model[4], 
+                censoring_lower = model[5],
+                censoring_upper = model[6],
+                m = model[7],
+                savepath = output_path_npe
+            )
+        end
+    end,
+    combined_grid
+)
+
+println("Finished training all models.")
 
