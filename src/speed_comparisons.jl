@@ -1,167 +1,189 @@
 using Pkg; Pkg.activate(".")
+using Distributed, SlurmClusterManager
+addprocs(SlurmManager(); exeflags=["--threads", "1", "--project"])
 
-using Statistics, Random
-include("mse_functions.jl")
-include("mcmc_functions.jl")
+@everywhere using Random
+@everywhere include("mse_functions.jl")
+@everywhere include("mcmc_functions.jl")
 
-function get_nbe_estimates(nbe_model, nbe_model_ci, test_data, slice_idx)
+@everywhere function get_nbe_estimates(nbe_model, nbe_model_ci, test_data, slice_idx)
     nbe_model(test_data[:, slice_idx])
     nbe_model_ci(test_data[:, slice_idx])
 end
 
+@everywhere function time_function(fn, args)
+    start = time_ns()
+    fn(args...)
+    return (time_ns() - start) / 1.0e9
+end
 
-function run_speed_comparison(nbe_model, nbe_model_ci, npe_model, test_data, test_pars, n_lists, iterations_list, slice_idx, savepath)
-    # Benchmark NBE with multiple runs
-    n_warmup = 1
+@everywhere function train_time_comparison()
+    n_lists = 5
+    width = 256
+    n_hidden = 3
+    train_size = 10000
+    train_nbe() = train_model_mlp(
+        n_lists, 
+        width, 
+        n_hidden, 
+        train_size, 
+        m = 1, 
+        censoring_lower = 0, 
+        censoring_upper = 10, 
+        savepath = nothing, 
+        intercept_dist = Uniform(1, 10)
+    )
+
+    encoding_dim = 128
+
+    train_npe_fixed() = train_npe(
+        n_lists,
+        width,
+        n_hidden,
+        encoding_dim,
+        train_size,
+        m = 1,
+        censoring_lower = 0,
+        censoring_upper = 10,
+        savepath = nothing
+    )
+
+    train_nbe() ## warmup
+    train_npe_fixed() ## warmup
     n_runs = 10
-    
-    # Warmup runs
-    for _ in 1:n_warmup
-        get_nbe_estimates(nbe_model, nbe_model_ci, test_data, slice_idx)
+    train_df = DataFrame()
+    for _ in 1:n_runs
+        push!(train_df, (method = "NBE", train_time = time_function(train_nbe, ())))
+        push!(train_df, (method = "NPE", train_time = time_function(train_npe_fixed, ())))
     end
-    
-    # Timed runs
-    nbe_times = zeros(n_runs)
-    for i in 1:n_runs
-        nbe_times[i] = @elapsed get_nbe_estimates(nbe_model, nbe_model_ci, test_data, slice_idx)
-    end
-    
-    # Store all runs
+    mkpath(joinpath("output", "speed_comparisons"))
+    CSV.write(
+        joinpath("output", "speed_comparisons", "train_time_comparison.csv"),
+        train_df
+    )
+end
+
+@everywhere function run_speed_comparison(slice_idx)
+    n_lists = 5
+    n_runs = 10
+    nbe_models_path = joinpath("output", "models_nbe")
+    npe_models_path = joinpath("output", "models_npe")
+    test_data_path = joinpath("output", "test_data")
+    test_data, test_pars = load_test_data(test_data_path, n_lists, 0, 10)
+
+    speed_comparison_path = joinpath("output", "speed_comparisons")
+    mkpath(speed_comparison_path)
+
+    npe_model = load_model_npe(
+        5, 
+        256, 
+        3,
+        10000,
+        0, 
+        10, 
+        1, 
+        npe_models_path
+    )
+
+    nbe_model = load_model_nbe(
+        5,
+        256,
+        3,
+        10000,
+        0,
+        10,
+        1,
+        nbe_models_path
+    )
+
+    nbe_model_ci = load_model_nbe(
+        5,
+        256,
+        3,
+        10000,
+        0,
+        10,
+        1,
+        nbe_models_path,
+        true
+    )
+
     out = DataFrame(
-        dataset = Int[],
+        dataset = Int64[],
         method = String[],
-        iterations = Int[],
-        run = Int[],
+        iterations = Int64[],
         time = Float64[]
     )
+
+    ## warm up first
+    nbe_time = time_function(get_nbe_estimates, (nbe_model, nbe_model_ci, test_data, slice_idx))
     
-    for (run_idx, time_val) in enumerate(nbe_times)
+    for _ in 1:n_runs
+        nbe_time = time_function(get_nbe_estimates, (nbe_model, nbe_model_ci, test_data, slice_idx))
         push!(out, (
             dataset = slice_idx,
             method = "NBE",
             iterations = 0,
-            run = run_idx,
-            time = time_val * 1e9  # Convert to nanoseconds
+            time = nbe_time
         ))
     end
 
-    for num_iterations in iterations_list
+    iterations_list = 1000 * 2 .^ collect(0:5)
+
+    for (i, num_iterations) in enumerate(iterations_list)
         println("Benchmarking MCMC with $num_iterations iterations...")
+        run_mcmc(slice_idx) = run_mcmc_test_slice(slice_idx, n_lists, test_data, test_pars, num_chains = 4, samples_path = nothing, summary_path = nothing, n_iterations = num_iterations)
         
-        # Warmup run for MCMC
-        run_mcmc_test_slice(slice_idx, n_lists, test_data, test_pars, num_chains = 4, samples_path = nothing, summary_path = nothing, n_iterations = num_iterations)
-        
-        # Timed runs for MCMC
-        mcmc_times = zeros(n_runs)
-        for i in 1:n_runs
-            mcmc_times[i] = @elapsed run_mcmc_test_slice(slice_idx, n_lists, test_data, test_pars, num_chains = 4, samples_path = nothing, summary_path = nothing, n_iterations = num_iterations)
-        end
-        
-        for (run_idx, time_val) in enumerate(mcmc_times)
+        i == 1 && time_function(run_mcmc, slice_idx) ## warmup
+
+        for _ in 1:n_runs
+            mcmc_time = time_function(run_mcmc, slice_idx)        
             push!(out, (
                 dataset = slice_idx,
                 method = "MCMC",
                 iterations = num_iterations,
-                run = run_idx,
-                time = time_val * 1e9  # Convert to nanoseconds
+                time = mcmc_time
             ))
         end
 
-        # Warmup run for NPE
-        sampleposterior(npe_model, reshape(test_data[:, slice_idx], :, 1), num_iterations)
+        run_npe(slice_idx) = sampleposterior(npe_model, reshape(test_data[:, slice_idx], :, 1), num_iterations)
         
-        # Timed runs for NPE
-        npe_times = zeros(n_runs)
-        for i in 1:n_runs
-            npe_times[i] = @elapsed sampleposterior(npe_model, reshape(test_data[:, slice_idx], :, 1), num_iterations)
-        end
-
-        for (run_idx, time_val) in enumerate(npe_times)
+        i == 1 && time_function(run_npe, slice_idx) ## warmup
+        
+        for _ in 1:n_runs
+            npe_time = time_function(run_npe, slice_idx)
             push!(out, (
                 dataset = slice_idx,
                 method = "NPE",
                 iterations = num_iterations,
-                run = run_idx,
-                time = time_val * 1e9  # Convert to nanoseconds
+                time = npe_time
             ))
         end
     end
-
+    savepath = joinpath("output", "speed_comparisons")
+    mkpath(savepath)
     CSV.write(
         joinpath(savepath, "speed_comparison_dataset_$(slice_idx).csv"),
         out
     )
 end
 
-n_lists = 5
-test_data_path = joinpath("output", "test_data")
-test_data, test_pars = load_test_data(test_data_path, n_lists, 0, 10)
 
-nbe_models_path = joinpath("output", "models_nbe")
-npe_models_path = joinpath("output", "models_npe")
 
-npe_model = load_model_npe(
-    5, 
-    256, 
-    3,
-    10000,
-    0, 
-    10, 
-    1, 
-    npe_models_path
-)
+test_data, test_pars = load_test_data(joinpath("output", "test_data"), 5, 0, 10)
 
-nbe_model = load_model_nbe(
-    5,
-    256,
-    3,
-    10000,
-    0,
-    10,
-    1,
-    nbe_models_path
-)
-
-nbe_model_ci = load_model_nbe(
-    5,
-    256,
-    3,
-    10000,
-    0,
-    10,
-    1,
-    nbe_models_path,
-    true
-)
-
-speed_comparison_path = joinpath("output", "speed_comparisons")
-mkpath(speed_comparison_path)
 
 Random.seed!(42)
 n_datasets_to_sample = 100
 datasets_to_sample = rand(1:size(test_data, 2), n_datasets_to_sample)
+savepath = joinpath("output", "speed_comparisons")
+datasets_to_sample = filter(datasets_to_sample) do idx
+    !isfile(joinpath(savepath, "speed_comparison_dataset_$(idx).csv"))
+end
 
-iterations_list = 1000 * 2 .^ collect(0:5)
-
-### TESTING
-iterations_list = iterations_list[1:3]
-datasets_to_sample = datasets_to_sample[1:4]
-
-map(
-    slice_idx -> begin
-        run_speed_comparison(
-            nbe_model,
-            nbe_model_ci,
-            npe_model,
-            test_data,
-            test_pars,
-            n_lists,
-            iterations_list,
-            slice_idx,
-            speed_comparison_path
-        )
-    end,
-    datasets_to_sample
-)
+pmap(run_speed_comparison, datasets_to_sample)
 
 
+## also run train time comparison
+
+train_time_comparison()
