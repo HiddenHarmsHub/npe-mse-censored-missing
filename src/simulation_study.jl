@@ -122,7 +122,7 @@ mkpath(npe_summary_path)
 pmap(
     i -> begin
         Random.seed!(i)
-        posterior_samples = sampleposterior(NPE_estimator, reshape(test_data[:, i], :, 1), 20000)
+        posterior_samples = boundedsampleposterior(NPE_estimator, reshape(test_data[:, i], :, 1), 20000, 1.0, 10.0)
         CSV.write(
             joinpath(npe_samples_path, "npe_test_results_$(i).csv"),
             DataFrame(posterior_samples', par_names)
