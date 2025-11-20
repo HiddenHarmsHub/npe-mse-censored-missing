@@ -4,7 +4,7 @@ function sample_parameters(
     K::Int; 
     intercept_dist = Uniform(1, 10), 
     beta_dist = Normal(0, 4), 
-    gamma_dist = Normal(0, 1/5)
+    gamma_dist = Normal(0, 4)
 )
     intercept = rand(intercept_dist)
     betas = rand(beta_dist, K)
