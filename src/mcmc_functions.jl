@@ -106,12 +106,12 @@ function likelihood_censored(counts::Vector{Int64}, pars::Vector, X::Matrix{Int6
     for (rate, count) in zip(rates, counts)
         if count == -1
             # P(0 <= X <= censoring_upper) = F(censoring_upper; λ) - F(0; λ)
-            for k in censoring_lower:censoring_upper
-                ll += k * log.(rate) .- rate 
-            end
+            #ll += log(sum(exp.(k .* log(rate) .- rate .- logfactorial(k)) for k in censoring_lower:censoring_upper))
+            ll += sum([logpdf(Poisson(rate), k) for k in censoring_lower:censoring_upper])
         else
             ll += count .* log.(rate) .- rate
         end
     end
     return ll
 end
+

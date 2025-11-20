@@ -460,6 +460,31 @@ ggsave(
     plot = point_estimates_zoomed, width = 10, height = 6, dpi = 300
 )
 
+intercept_mcmc_convergence_plot <- comparison_df %>%
+    filter(Method == "MCMC") %>%
+    mutate(converged = rhat <= 1.01) %>% 
+    pivot_wider(
+        names_from = Metric,
+        values_from = Value
+    ) %>%
+    ggplot(aes(x = exp(true_values), y = log(ape))) +
+    geom_point(alpha = 0.5, aes(col = converged)) +
+    labs(
+        x = "True hidden population size",
+        y = "Log APE",
+        col = "Converged"
+    ) +
+    theme_minimal(base_size = 14) +
+    theme(
+        plot.title = element_text(face = "bold"),
+        panel.grid.minor = element_blank(),
+        legend.position = "top"
+    )
+
+ggsave(
+    filename = file.path("output", "figures", "mcmc_convergence_ape.png"), 
+    plot = intercept_mcmc_convergence_plot, width = 7, height = 5, dpi = 300
+)
 
 point_estimate_summaries <- comparison_df %>%
     group_by(Method, Metric) %>%
@@ -589,14 +614,11 @@ benchmark_files <- list.files(
     full.names = TRUE
 )
 
-
-
 benchmark_df <- lapply(benchmark_files, function(benchmark_file) {
     benchmark_df <- read_csv(benchmark_file, show_col_types = FALSE)
     return(benchmark_df)
 }) %>%
     bind_rows()
-
 
 speed_comparison_plot <- benchmark_df %>%
     filter(method %in% c("NPE", "MCMC")) %>%
@@ -765,8 +787,13 @@ silverman_mcmc_samples <- read_csv(
     show_col_types = FALSE
 )
 
+silverman_uninformative_mcmc_samples <- read_csv(
+    file.path("output", "real_data_analysis", "silverman_uninformative_mcmc_posterior_samples.csv"),
+    show_col_types = FALSE
+)
+
 silverman_mcmc_long <- silverman_mcmc_samples %>%
-    select(matches("intercept|beta|gamma")) %>%
+    select(matches("alpha|beta|gamma")) %>%
     pivot_longer(
         cols = everything(),
         names_to = "Parameter",
@@ -778,8 +805,21 @@ silverman_mcmc_long <- silverman_mcmc_samples %>%
         Parameter = str_replace_all(Parameter, "\\]", "")
     )
 
+silverman_mcmc_uninformative_long <- silverman_uninformative_mcmc_samples %>%
+    select(matches("alpha|beta|gamma")) %>%
+    pivot_longer(
+        cols = everything(),
+        names_to = "Parameter",
+        values_to = "Value"
+    ) %>%
+    mutate(
+        Method = "MCMC Uninformative",
+        Parameter = str_replace_all(Parameter, "\\[", "_"),
+        Parameter = str_replace_all(Parameter, "\\]", "")
+    )
+
 silverman_npe_long <- silverman_npe_samples %>%
-    select(matches("intercept|beta|gamma")) %>%
+    select(matches("alpha|beta|gamma")) %>%
     pivot_longer(
         cols = everything(),
         names_to = "Parameter",
@@ -800,7 +840,11 @@ silverman_nbe_long <- silverman_nbe %>%
     ) %>%
     select(Parameter, Value, Method)
 
-silverman_combined_samples <- bind_rows(silverman_mcmc_long, silverman_npe_long)
+silverman_combined_samples <- bind_rows(
+    silverman_mcmc_long,
+    silverman_mcmc_uninformative_long,
+    silverman_npe_long
+)
 
 ## also compute frequentist estimates for vertical lines
 raw_data_silverman <- read_csv(
@@ -896,7 +940,7 @@ silverman_estimate_comparison <- silverman_combined_samples %>%
         name = "Point Estimates",
         values = c("NBE" = "solid", "MLE" = "solid"),
         guide = guide_legend(override.aes = list(
-            color = c("NBE" = "black", "MLE" = "orange")
+            color = c("NBE" = "orange", "MLE" = "black")
         ))
     ) +
     theme_minimal(base_size = 14) +
@@ -980,13 +1024,15 @@ king_data <- raw_data_king %>%
     mutate(count = as.integer(count))
 
 king_loglikelihood <- function(king_data, X, pars) {
-    logliks <- numeric(nrow(king_data))
+    logliks <- numeric(nrow(king_data)) 
     rates <- exp(X %*% pars)
-    logliks <- ifelse(
-        king_data$count == -1,
-        dpois(1:4, lambda = rates, log = TRUE),
-        dpois(king_data$count, lambda = rates, log = TRUE)
-    )
+    for (i in 1:nrow(king_data)) {
+        if (king_data$count[i] == -1) {
+            logliks[i] <- sum(dpois(1:4, lambda = rates[i], log = TRUE))
+        } else {
+            logliks[i] <- dpois(king_data$count[i], lambda = rates[i], log = TRUE)
+        }
+    }
     return(sum(logliks))
 }
 
@@ -1001,7 +1047,8 @@ optimised <- optim(
     method = "BFGS"
 )
 
-
+optimised$par
+optimised$value
 
 king_nbe <- read_csv(
    file.path("output", "real_data_analysis", "king_nbe_parameter_estimates.csv"),
@@ -1018,6 +1065,16 @@ king_mcmc_samples <- read_csv(
     show_col_types = FALSE
 )
 
+king_uninformative_mcmc_samples <- read_csv(
+    file.path("output", "real_data_analysis", "king_uninformative_mcmc_posterior_samples.csv"),
+    show_col_types = FALSE
+)
+
+king_mle <- read_csv(
+    file.path("output", "real_data_analysis", "king_mle_parameter_estimates.csv"),
+    show_col_types = FALSE
+)
+
 king_mcmc_long <- king_mcmc_samples %>%
     select(matches("alpha|beta|gamma")) %>%
     pivot_longer(
@@ -1027,6 +1084,26 @@ king_mcmc_long <- king_mcmc_samples %>%
     ) %>%
     mutate(
         Method = "MCMC",
+        Parameter = str_replace_all(Parameter, "\\[", "_"),
+        Parameter = str_replace_all(Parameter, "\\]", "")
+    )
+
+king_mcmc_long %>%
+    group_by(Parameter) %>%
+    summarise(
+        Mean = mean(Value),
+        SD = sd(Value)
+    )
+
+king_mcmc_uninformative_long <- king_uninformative_mcmc_samples %>%
+    select(matches("alpha|beta|gamma")) %>%
+    pivot_longer(
+        cols = everything(),
+        names_to = "Parameter",
+        values_to = "Value"
+    ) %>%
+    mutate(
+        Method = "MCMC Uninformative",
         Parameter = str_replace_all(Parameter, "\\[", "_"),
         Parameter = str_replace_all(Parameter, "\\]", "")
     )
@@ -1053,7 +1130,11 @@ king_nbe_long <- king_nbe %>%
     ) %>%
     select(Parameter, Value, Method)
 
-king_combined_samples <- bind_rows(king_mcmc_long, king_npe_long)
+king_combined_samples <- bind_rows(
+    king_mcmc_long,
+    king_mcmc_uninformative_long,
+    king_npe_long
+)
 
 two_digit_numbers <- enumerate_two_digit_numbers(4)
 
@@ -1063,25 +1144,22 @@ gamma_names <- sapply(two_digit_numbers, function(x) {
 
 par_names <- c("alpha", paste0("beta_", 1:4), gamma_names)
 
-king_frequentist_df <- data.frame(
-    Parameter = par_names,
-    Value = as.numeric(optimised$par)
-) %>%
+king_frequentist_df <- king_mle %>%
+    rename(Parameter = parameter, Value = estimate) %>%
     mutate(
         Method = "Frequentist",
-        Parameter = recode(Parameter, !!!create_parameter_mapping(5))
     )
 
 king_estimate_comparison <- king_combined_samples %>%
     ggplot(aes(x = Value, fill = Method)) +
     geom_density(alpha = 0.6) +
     geom_vline(
-        data = king_nbe_long %>% filter(Parameter != "alpha"),
+        data = king_nbe_long ,
         aes(xintercept = Value, linetype = "NBE"),
         linewidth = 1
     ) +
     geom_vline(
-        data = king_frequentist_df %>% filter(Parameter != "alpha"),
+        data = king_frequentist_df,
         aes(xintercept = Value, linetype = "MLE"),
         col = "orange",
         linewidth = 1
@@ -1092,7 +1170,7 @@ king_estimate_comparison <- king_combined_samples %>%
         name = "Point Estimates",
         values = c("NBE" = "solid", "MLE" = "solid"),
         guide = guide_legend(override.aes = list(
-            color = c("NBE" = "black", "MLE" = "orange")
+            color = c("NBE" = "orange", "MLE" = "black")
         ))
     ) +
     theme_minimal(base_size = 14) +

@@ -1,6 +1,7 @@
 include("mse_functions.jl")
 include("mcmc_functions.jl")
 
+using Optim
 
 output_path = joinpath("output", "real_data_analysis")
 mkpath(output_path)
@@ -29,8 +30,6 @@ function MAE_df(n_lists, censoring_lower, censoring_upper, intercept_files)
     )
     return summary
 end
-
-filter(x -> x.censoring_upper == 4, intercept_df)
 
 ## Find the best architectures for 5 lists
 MAE_5_df = MAE_df(5, 0, 0, intercept_files)
@@ -138,6 +137,37 @@ rename!(silverman_mcmc_df, mcmc_param_mapping(5))
 CSV.write(
     joinpath(output_path, "silverman_mcmc_posterior_samples.csv"),
     silverman_mcmc_df
+)
+
+## also try with uninformative gamma priors
+gamma_uninformative_dist = Normal(0, 4)
+m_silverman_uninformative = mse_model_censored(
+    input_counts_silverman, 
+    X, 
+    intercept_dist, 
+    beta_dist, 
+    gamma_uninformative_dist, 
+    censoring_lower, 
+    censoring_upper
+)
+num_chains = 4
+n_iterations = 5000
+chains_silverman_uninformative = sample(
+    m_silverman_uninformative, 
+    NUTS(), 
+    MCMCSerial(), 
+    n_iterations, 
+    num_chains, 
+    progress = false,
+    parallel = false
+)
+
+silverman_mcmc_df_uninformative = DataFrame(chains_silverman_uninformative)
+rename!(silverman_mcmc_df_uninformative, mcmc_param_mapping(5))
+
+CSV.write(
+    joinpath(output_path, "silverman_uninformative_mcmc_posterior_samples.csv"),
+    silverman_mcmc_df_uninformative
 )
 
 ## simulate from the posterior predictive 
@@ -258,6 +288,38 @@ CSV.write(
 )
 
 
+## also try uninformative gamma priors
+m_king_uniformative = mse_model_censored(
+    input_counts, 
+    X, 
+    intercept_dist, 
+    beta_dist, 
+    gamma_uninformative_dist, 
+    censoring_lower, 
+    censoring_upper
+)
+
+num_chains = 4
+n_iterations = 5000
+chains_king_uninformative = sample(
+    m_king_uniformative, 
+    NUTS(), 
+    MCMCSerial(), 
+    n_iterations, 
+    num_chains, 
+    progress = false,
+    parallel = false
+)
+
+res_df_king_uninformative = DataFrame(chains_king_uninformative)
+rename!(res_df_king_uninformative, mcmc_param_mapping(4))
+
+CSV.write(
+    joinpath(output_path, "king_uninformative_mcmc_posterior_samples.csv"),
+    res_df_king_uninformative
+)
+
+
 ## also model assesmment
 
 
@@ -266,4 +328,29 @@ ppd_king_df = DataFrame(ppd_king', ["N_$x" for x in replace.(enumerate_all_combi
 CSV.write(
     joinpath(output_path, "king_npe_posterior_predictive.csv"),
     ppd_king_df
+)
+
+
+## compute MLEs
+
+# Initial parameter values
+initial_pars = rand(length(param_names(4)))  # or use a better initial guess
+
+# Optimize
+result = optimize(
+    pars -> -likelihood_censored(input_counts, pars, X, 1, 4), 
+    initial_pars, 
+    BFGS()
+)
+
+# Extract optimized parameters
+optimal_pars = Optim.minimizer(result)
+optimal_likelihood = -Optim.minimum(result)
+
+CSV.write(
+    joinpath(output_path, "king_mle_parameter_estimates.csv"),
+    DataFrame(
+        parameter = param_names(4),
+        estimate = optimal_pars
+    )
 )
