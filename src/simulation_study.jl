@@ -53,7 +53,7 @@ end
 
     model_npe = load_model_npe(n_lists, width, n_hidden, train_size, censoring_lower, censoring_upper, m, npe_models_path)
     npe_estimates = map(eachcol(test_data)) do x
-        posteriorquantile(model_npe, reshape(x, :, 1), [0.025, 0.5, 0.975])[1, :]
+        boundedposteriorquantile(model_npe, reshape(x, :, 1), [0.025, 0.5, 0.975], 5000, 1.0, 10.0)[1, :]
     end |> x -> hcat(x...)
 
 

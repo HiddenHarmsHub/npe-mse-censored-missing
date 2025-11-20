@@ -1,4 +1,7 @@
-using Distributions, NeuralEstimators, Flux, BSON, DataFrames, CSV, Combinatorics, Folds
+using Distributions, Flux, BSON, DataFrames, CSV, Combinatorics, Folds
+
+import NeuralEstimators: sampleposterior
+using NeuralEstimators
 
 function sample_parameters(
     K::Int; 
@@ -408,5 +411,33 @@ end
 bounded_sample(sample, lower, upper) = sample[:, (sample[1, :] .>= lower) .& (sample[1, :] .<= upper)]
 
 param_names(n_lists) = ["alpha"; ["beta_$(i)" for i in 1:n_lists]; ["gamma_$(i)$(j)" for (i,j) in enumerate_two_digit_numbers(n_lists)]...]
+
+function boundedsampleposterior(
+    estimator::Union{PosteriorEstimator, RatioEstimator}, 
+    Z, 
+    N::Integer,
+    lower::Real,
+    upper::Real;
+    param_idx::Integer = 1,
+    kwargs...
+)
+    samples = sampleposterior(estimator, Z, N; kwargs...)
+    mask = (samples[param_idx, :] .>= lower) .& (samples[param_idx, :] .<= upper)
+    return samples[:, mask]
+end
+
+function boundedposteriorquantile(
+    estimator::Union{PosteriorEstimator, RatioEstimator}, 
+    Z, 
+    probs,
+    N::Integer,
+    lower::Real,
+    upper::Real;
+    param_idx::Integer = 1,
+    kwargs...
+)
+    samples = boundedsampleposterior(estimator, Z, N, lower, upper; param_idx=param_idx, kwargs...)
+    return posteriorquantile(samples, probs)
+end
 
 
