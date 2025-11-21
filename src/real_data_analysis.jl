@@ -112,7 +112,7 @@ X = one_hot_encode_parameters(5)
 
 intercept_dist = Uniform(1, 10)
 beta_dist = Normal(0, 4)
-gamma_dist = Normal(0, 1/5)
+gamma_dist = Normal(0, 4)
 
 censoring_lower = 0
 censoring_upper = 0
@@ -139,36 +139,6 @@ CSV.write(
     silverman_mcmc_df
 )
 
-## also try with uninformative gamma priors
-gamma_uninformative_dist = Normal(0, 4)
-m_silverman_uninformative = mse_model_censored(
-    input_counts_silverman, 
-    X, 
-    intercept_dist, 
-    beta_dist, 
-    gamma_uninformative_dist, 
-    censoring_lower, 
-    censoring_upper
-)
-num_chains = 4
-n_iterations = 5000
-chains_silverman_uninformative = sample(
-    m_silverman_uninformative, 
-    NUTS(), 
-    MCMCSerial(), 
-    n_iterations, 
-    num_chains, 
-    progress = false,
-    parallel = false
-)
-
-silverman_mcmc_df_uninformative = DataFrame(chains_silverman_uninformative)
-rename!(silverman_mcmc_df_uninformative, mcmc_param_mapping(5))
-
-CSV.write(
-    joinpath(output_path, "silverman_uninformative_mcmc_posterior_samples.csv"),
-    silverman_mcmc_df_uninformative
-)
 
 ## simulate from the posterior predictive 
 
@@ -261,7 +231,7 @@ X = one_hot_encode_parameters(4)
 
 intercept_dist = Uniform(1, 10)
 beta_dist = Normal(0, 4)
-gamma_dist = Normal(0, 1/5)
+gamma_dist = Normal(0, 4)
 
 censoring_lower = 1
 censoring_upper = 4
@@ -287,37 +257,6 @@ CSV.write(
     res_df_king
 )
 
-
-## also try uninformative gamma priors
-m_king_uniformative = mse_model_censored(
-    input_counts, 
-    X, 
-    intercept_dist, 
-    beta_dist, 
-    gamma_uninformative_dist, 
-    censoring_lower, 
-    censoring_upper
-)
-
-num_chains = 4
-n_iterations = 5000
-chains_king_uninformative = sample(
-    m_king_uniformative, 
-    NUTS(), 
-    MCMCSerial(), 
-    n_iterations, 
-    num_chains, 
-    progress = false,
-    parallel = false
-)
-
-res_df_king_uninformative = DataFrame(chains_king_uninformative)
-rename!(res_df_king_uninformative, mcmc_param_mapping(4))
-
-CSV.write(
-    joinpath(output_path, "king_uninformative_mcmc_posterior_samples.csv"),
-    res_df_king_uninformative
-)
 
 
 ## also model assesmment

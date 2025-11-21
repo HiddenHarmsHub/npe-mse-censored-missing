@@ -73,7 +73,10 @@ one_hot_encode_parameters <- function(K) {
     return(one_hot_matrix)
 }
 
-ape_df <- read_csv(file.path("output", "intercept_estimate_comparison.csv")) %>%
+ape_df <- read_csv(
+    file.path("output", "intercept_estimate_comparison.csv"),
+    show_col_types = FALSE
+) %>%
     pivot_longer(
         cols = c(APE_NBE, APE_NPE),
         names_to = "Method",
@@ -563,7 +566,10 @@ ggsave(
 )
 
 
-coverage_df <- read_csv(file.path("output", "coverage_comparison_npe_mcmc.csv"))
+coverage_df <- read_csv(
+    file.path("output", "coverage_comparison_npe_mcmc.csv"),
+    show_col_types = FALSE
+)
 
 converged_datasets <- mcmc_df %>%
     filter(parameters == "intercept", rhat <= 1.01) %>%
@@ -602,12 +608,7 @@ ggsave(
     plot = coverage_plot, width = 7, height = 5, dpi = 300
 )
 
-
-
-
-
 ## speed benchmarking
-
 benchmark_files <- list.files(
     path = file.path("output", "speed_comparisons"), 
     pattern = "*.csv", 
@@ -787,11 +788,6 @@ silverman_mcmc_samples <- read_csv(
     show_col_types = FALSE
 )
 
-silverman_uninformative_mcmc_samples <- read_csv(
-    file.path("output", "real_data_analysis", "silverman_uninformative_mcmc_posterior_samples.csv"),
-    show_col_types = FALSE
-)
-
 silverman_mcmc_long <- silverman_mcmc_samples %>%
     select(matches("alpha|beta|gamma")) %>%
     pivot_longer(
@@ -805,18 +801,7 @@ silverman_mcmc_long <- silverman_mcmc_samples %>%
         Parameter = str_replace_all(Parameter, "\\]", "")
     )
 
-silverman_mcmc_uninformative_long <- silverman_uninformative_mcmc_samples %>%
-    select(matches("alpha|beta|gamma")) %>%
-    pivot_longer(
-        cols = everything(),
-        names_to = "Parameter",
-        values_to = "Value"
-    ) %>%
-    mutate(
-        Method = "MCMC Uninformative",
-        Parameter = str_replace_all(Parameter, "\\[", "_"),
-        Parameter = str_replace_all(Parameter, "\\]", "")
-    )
+
 
 silverman_npe_long <- silverman_npe_samples %>%
     select(matches("alpha|beta|gamma")) %>%
@@ -842,7 +827,6 @@ silverman_nbe_long <- silverman_nbe %>%
 
 silverman_combined_samples <- bind_rows(
     silverman_mcmc_long,
-    silverman_mcmc_uninformative_long,
     silverman_npe_long
 )
 
@@ -1065,10 +1049,6 @@ king_mcmc_samples <- read_csv(
     show_col_types = FALSE
 )
 
-king_uninformative_mcmc_samples <- read_csv(
-    file.path("output", "real_data_analysis", "king_uninformative_mcmc_posterior_samples.csv"),
-    show_col_types = FALSE
-)
 
 king_mle <- read_csv(
     file.path("output", "real_data_analysis", "king_mle_parameter_estimates.csv"),
@@ -1095,19 +1075,6 @@ king_mcmc_long %>%
         SD = sd(Value)
     )
 
-king_mcmc_uninformative_long <- king_uninformative_mcmc_samples %>%
-    select(matches("alpha|beta|gamma")) %>%
-    pivot_longer(
-        cols = everything(),
-        names_to = "Parameter",
-        values_to = "Value"
-    ) %>%
-    mutate(
-        Method = "MCMC Uninformative",
-        Parameter = str_replace_all(Parameter, "\\[", "_"),
-        Parameter = str_replace_all(Parameter, "\\]", "")
-    )
-
 king_npe_long <- king_npe_samples %>%
     select(matches("alpha|beta|gamma")) %>%
     pivot_longer(
@@ -1132,7 +1099,6 @@ king_nbe_long <- king_nbe %>%
 
 king_combined_samples <- bind_rows(
     king_mcmc_long,
-    king_mcmc_uninformative_long,
     king_npe_long
 )
 
