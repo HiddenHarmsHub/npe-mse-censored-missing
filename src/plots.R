@@ -274,70 +274,11 @@ censoring_summary_table %>%
 ### Compare MCMC estimates
 
 mcmc_summary_file <- file.path("output", "mcmc_summary.csv")
-
-if(file.exists(mcmc_summary_file)) {
-    mcmc_df <- read_csv(mcmc_summary_file, show_col_types = FALSE)
-} else {
-    mcmc_files <- list.files(
-        path = file.path("output", "mcmc_summary"), 
-        pattern = "*.csv", 
-        full.names = TRUE
-    )
-
-    mcmc_df <- lapply(mcmc_files, function(mcmc_file) {
-        mcmc_df <- read_csv(mcmc_file, show_col_types = FALSE)
-        mcmc_df$dataset <- parse_number(mcmc_file)
-        return(mcmc_df)
-    }) %>% 
-        bind_rows() %>% 
-        select(
-            dataset, 
-            parameters,
-            true_values,
-            median_mcmc = estimated_medians,
-            lower_ci_mcmc = lower_95ci,
-            upper_ci_mcmc = upper_95ci,
-            rhat
-        )
-
-    write.csv(
-        mcmc_df, 
-        file.path("output", "mcmc_summary.csv"), 
-        row.names = FALSE
-    )
-}
+mcmc_df <- read_csv(mcmc_summary_file, show_col_types = FALSE)
 
 npe_summary_file <- file.path("output", "npe_summary.csv")
-if(file.exists(npe_summary_file)) {
-    npe_df <- read_csv(npe_summary_file, show_col_types = FALSE)
-} else {
-    npe_files <- list.files(
-        path = file.path("output", "npe_summary"), 
-        pattern = "*.csv", 
-        full.names = TRUE
-    )
+npe_df <- read_csv(npe_summary_file, show_col_types = FALSE)
 
-    npe_df <- lapply(npe_files, function(npe_file) {
-        npe_df <- read_csv(npe_file, show_col_types = FALSE)
-        npe_df$dataset <- parse_number(npe_file)
-        return(npe_df)
-    }) %>% 
-        bind_rows() %>% 
-        select(
-            dataset, 
-            parameters,
-            true_values,
-            median_npe = estimated_medians,
-            lower_ci_npe = lower_95ci,
-            upper_ci_npe = upper_95ci
-        )
-
-    write.csv(
-        npe_df, 
-        file.path("output", "npe_summary.csv"), 
-        row.names = FALSE
-    )
-}
 
 nbe_df <- ape_df %>% 
     filter( 
@@ -801,8 +742,6 @@ silverman_mcmc_long <- silverman_mcmc_samples %>%
         Parameter = str_replace_all(Parameter, "\\]", "")
     )
 
-
-
 silverman_npe_long <- silverman_npe_samples %>%
     select(matches("alpha|beta|gamma")) %>%
     pivot_longer(
@@ -908,12 +847,12 @@ silverman_estimate_comparison <- silverman_combined_samples %>%
     ggplot(aes(x = Value, fill = Method)) +
     geom_density(alpha = 0.6) +
     geom_vline(
-        data = silverman_nbe_long %>% filter(Parameter != "alpha"),
+        data = silverman_nbe_long,
         aes(xintercept = Value, linetype = "NBE"),
         linewidth = 1
     ) +
     geom_vline(
-        data = silverman_frequentist_df %>% filter(Parameter != "alpha"),
+        data = silverman_frequentist_df ,
         aes(xintercept = Value, linetype = "MLE"),
         col = "orange",
         linewidth = 1
@@ -973,7 +912,7 @@ ppd_silverman <- ppd_silverman_npe_df %>%
         data = silverman_counts,
         aes(xintercept = count),
         color = "red",
-        size = 1
+        linewidth = 1
     ) +
     facet_wrap(~group, ncol = 5, scales = "free") +
     labs(
@@ -987,7 +926,68 @@ ggsave(
     plot = ppd_silverman, width = 10, height = 8, dpi = 300
 )
 
+## Create parameter estimate table for alpha (intercept/hidden population)
+alpha_estimates_table <- bind_rows(
+    silverman_mcmc_long %>% 
+        filter(Parameter == "alpha") %>%
+        summarise(
+            Method = "MCMC",
+            Parameter = "alpha",
+            Median = median(Value),
+            Lower_CI = quantile(Value, 0.025),
+            Upper_CI = quantile(Value, 0.975)
+        ),
+    silverman_npe_long %>% 
+        filter(Parameter == "alpha") %>%
+        summarise(
+            Method = "NPE",
+            Parameter = "alpha",
+            Median = median(Value),
+            Lower_CI = quantile(Value, 0.025),
+            Upper_CI = quantile(Value, 0.975)
+        ),
+    silverman_nbe %>% 
+        filter(parameter == "alpha") %>%
+        summarise(
+            Method = "NBE",
+            Parameter = "alpha",
+            Median = estimate,
+            Lower_CI = lower_ci,
+            Upper_CI = upper_ci
+        ),
+    {
+        ci_alpha <- suppressMessages(confint.default(fit_glm, parm = "(Intercept)", level = 0.95))
+        tibble(
+            Method = "MLE",
+            Parameter = "alpha",
+            Median = coef(fit_glm)["(Intercept)"],
+            Lower_CI = ci_alpha[1],
+            Upper_CI = ci_alpha[2]
+        )
+    }
+) %>%
+    mutate(
+        `Hidden Population` = round(exp(Median), 0),
+        `95% CI` = ifelse(
+            is.na(Lower_CI),
+            "-",
+            paste0("(", round(exp(Lower_CI), 0), ", ", round(exp(Upper_CI), 0), ")")
+        )
+    ) %>%
+    select(Method, `Hidden Population`, `95% CI`)
 
+## Print LaTeX table
+table_lines <- c(
+    "\\begin{tabular}{lcc}",
+    "\\hline",
+    "Method & Hidden Population & 95\\% CI \\\\",
+    "\\hline",
+    apply(alpha_estimates_table, 1, function(r) paste(r, collapse = " & ") %>% paste0(" \\\\")),
+    "\\hline",
+    "\\end{tabular}"
+)
+
+cat(paste(table_lines, collapse = "\n"), "\n")
 
 
 
@@ -1003,37 +1003,6 @@ ppd_king_npe_df <- read_csv(
     show_col_types = FALSE
 )
 
-king_data <- raw_data_king %>%
-    mutate(count = ifelse(count == "missing", "-1", count)) %>%
-    mutate(count = as.integer(count))
-
-king_loglikelihood <- function(king_data, X, pars) {
-    logliks <- numeric(nrow(king_data)) 
-    rates <- exp(X %*% pars)
-    for (i in 1:nrow(king_data)) {
-        if (king_data$count[i] == -1) {
-            logliks[i] <- sum(dpois(1:4, lambda = rates[i], log = TRUE))
-        } else {
-            logliks[i] <- dpois(king_data$count[i], lambda = rates[i], log = TRUE)
-        }
-    }
-    return(sum(logliks))
-}
-
-
-X_king <- one_hot_encode_parameters(4)
-pars_init <- c(3.0, -2.0, 0.5, 0.3, 0.2, 0.1, 0.05, 0.04, 0.03, 0.02, 0.01)
-
-
-optimised <- optim(
-    par = pars_init,
-    fn = function(pars) -king_loglikelihood(king_data, X_king, pars),
-    method = "BFGS"
-)
-
-optimised$par
-optimised$value
-
 king_nbe <- read_csv(
    file.path("output", "real_data_analysis", "king_nbe_parameter_estimates.csv"),
    show_col_types = FALSE
@@ -1048,7 +1017,6 @@ king_mcmc_samples <- read_csv(
     file.path("output", "real_data_analysis", "king_mcmc_posterior_samples.csv"),
     show_col_types = FALSE
 )
-
 
 king_mle <- read_csv(
     file.path("output", "real_data_analysis", "king_mle_parameter_estimates.csv"),
@@ -1066,13 +1034,6 @@ king_mcmc_long <- king_mcmc_samples %>%
         Method = "MCMC",
         Parameter = str_replace_all(Parameter, "\\[", "_"),
         Parameter = str_replace_all(Parameter, "\\]", "")
-    )
-
-king_mcmc_long %>%
-    group_by(Parameter) %>%
-    summarise(
-        Mean = mean(Value),
-        SD = sd(Value)
     )
 
 king_npe_long <- king_npe_samples %>%
@@ -1150,8 +1111,123 @@ king_estimate_comparison <- king_combined_samples %>%
         panel.spacing = grid::unit(2, "lines")
     )
 
-
 ggsave(
     filename = file.path("output", "figures", "king_parameter_estimate_comparison.png"), 
     plot = king_estimate_comparison, width = 10, height = 8, dpi = 300
 )
+
+## also plot model assessment
+
+king_counts <- raw_data_king %>%
+    mutate(group = paste0("N_", group)) %>%
+    right_join(
+        ppd_king_npe_df %>% 
+            pivot_longer(everything(), names_to = "group") %>% 
+            distinct(group),
+        by = "group"
+    ) %>%
+    mutate(
+        count = ifelse(count == "missing", NA, count),
+        count = as.integer(count),
+        lower = ifelse(is.na(count), 1, NA),
+        upper = ifelse(is.na(count), 4, NA)
+    )
+
+ppd_king <- ppd_king_npe_df %>%
+    pivot_longer(
+        cols = everything(),
+        names_to = "group",
+        values_to = "predicted_count"
+    ) %>%
+    ggplot(aes(x = predicted_count)) +
+    geom_histogram(fill = "lightblue", color = "black", alpha = 0.7) +
+    geom_rect(
+        data = king_counts %>% filter(!is.na(lower)),
+        aes(xmin = lower, xmax = upper),
+        ymin = -Inf,
+        ymax = Inf,
+        fill = "orange",
+        alpha = 0.3,
+        inherit.aes = FALSE
+    ) +
+    geom_vline(
+        data = king_counts,
+        aes(xintercept = count),
+        color = "red",
+        linewidth = 1
+    ) +
+    facet_wrap(~group, ncol = 5, scales = "free") +
+    labs(
+        x = "Count",
+        y = "Frequency"
+    )
+
+
+ggsave(
+    filename = file.path("output", "figures", "king_ppd_npe.png"), 
+    plot = ppd_king, width = 10, height = 8, dpi = 300
+)
+
+
+
+## Create parameter estimate table for alpha (intercept/hidden population) for King data
+king_alpha_estimates_table <- bind_rows(
+    king_mcmc_long %>% 
+        filter(Parameter == "alpha") %>%
+        summarise(
+            Method = "MCMC",
+            Parameter = "alpha",
+            Median = median(Value),
+            Lower_CI = quantile(Value, 0.025),
+            Upper_CI = quantile(Value, 0.975)
+        ),
+    king_npe_long %>% 
+        filter(Parameter == "alpha") %>%
+        summarise(
+            Method = "NPE",
+            Parameter = "alpha",
+            Median = median(Value),
+            Lower_CI = quantile(Value, 0.025),
+            Upper_CI = quantile(Value, 0.975)
+        ),
+    king_nbe %>% 
+        filter(parameter == "alpha") %>%
+        summarise(
+            Method = "NBE",
+            Parameter = "alpha",
+            Median = estimate,
+            Lower_CI = lower_ci,
+            Upper_CI = upper_ci
+        ),
+    king_frequentist_df %>%
+        filter(Parameter == "alpha") %>%
+        summarise(
+            Method = "MLE",
+            Parameter = "alpha",
+            Median = Value,
+            Lower_CI = lower_ci,
+            Upper_CI = upper_ci
+        )
+) %>%
+    mutate(
+        `Hidden Population` = round(exp(Median), 0),
+        `95% CI` = ifelse(
+            is.na(Lower_CI),
+            "-",
+            paste0("(", round(exp(Lower_CI), 0), ", ", round(exp(Upper_CI), 0), ")")
+        )
+    ) %>%
+    select(Method, `Hidden Population`, `95% CI`)
+
+## Print LaTeX table for King data
+king_table_lines <- c(
+    "\\begin{tabular}{lcc}",
+    "\\hline",
+    "Method & Hidden Population & 95\\% CI \\\\",
+    "\\hline",
+    apply(king_alpha_estimates_table, 1, function(r) paste(r, collapse = " & ") %>% paste0(" \\\\")),
+    "\\hline",
+    "\\end{tabular}"
+)
+
+cat(paste(king_table_lines, collapse = "\n"), "\n")
