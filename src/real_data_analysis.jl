@@ -1,7 +1,7 @@
 include("mse_functions.jl")
 include("mcmc_functions.jl")
 
-using Optim
+using Optim, ForwardDiff, LinearAlgebra
 
 output_path = joinpath("output", "real_data_analysis")
 mkpath(output_path)
@@ -275,21 +275,37 @@ CSV.write(
 # Initial parameter values
 initial_pars = rand(length(param_names(4)))  # or use a better initial guess
 
+# Define negative log-likelihood
+neg_loglik(pars) = -likelihood_censored(input_counts, pars, X, 1, 4)
+
 # Optimize
 result = optimize(
-    pars -> -likelihood_censored(input_counts, pars, X, 1, 4), 
+    neg_loglik, 
     initial_pars, 
-    BFGS()
+    BFGS(),
+    autodiff = :forward
 )
 
 # Extract optimized parameters
 optimal_pars = Optim.minimizer(result)
 optimal_likelihood = -Optim.minimum(result)
 
+# Compute Hessian for confidence intervals
+hessian_matrix = ForwardDiff.hessian(neg_loglik, optimal_pars)
+cov_matrix = inv(hessian_matrix)
+standard_errors = sqrt.(diag(cov_matrix))
+
+# 95% confidence intervals (using normal approximation)
+z_score = 1.96
+lower_ci = optimal_pars .- z_score .* standard_errors
+upper_ci = optimal_pars .+ z_score .* standard_errors
+
 CSV.write(
     joinpath(output_path, "king_mle_parameter_estimates.csv"),
     DataFrame(
         parameter = param_names(4),
-        estimate = optimal_pars
+        estimate = optimal_pars,
+        lower_ci = lower_ci,
+        upper_ci = upper_ci
     )
 )
