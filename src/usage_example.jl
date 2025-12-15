@@ -1,24 +1,30 @@
 using BSON, NeuralEstimators
 
-include("model_loading.jl")
+## User supplied parameters
+K = 5;
+censoring_lower = 0;
+censoring_upper = 10; 
+
+
+function prepare_data(data::Vector{Int})
+    ## first log transform positive counts
+    out = [x > 0 ? log(x + 1) : x for x in data]
+
+    if any(data .< 0)
+        ## censoring present
+        append!(out, 1 * (out .< 0))
+    end
+
+    return reshape(Float32.(out), (length(out), 1))
+end
+
 
 ## First generate some random input data and set parameters
-
-## parameters the user sets
-K = 5 # user supplied
-censoring_lower = 0 # user supplied
-censoring_upper = 0 # user supplied
-
-
-
 ## Generate random input data the user supplies
-input_data = Int.(floor.(rand(Float64, K * 6 + 1, 1)*10))
+user_inputted_data = vec(Int.(floor.(rand(Float64, K * 6 + 1, 1)*20)));
+user_inputted_data[user_inputted_data .< censoring_upper] .= -1; ## simulate censoring with -1
 
-## Log transform the data
-## Note that the data of length M = 2^K - 1 should be in a Mx1 matrix, and of type Float32
-input_data = Float32.(log.(input_data .+ 1))
-
-
+input_data = prepare_data(user_inputted_data);
 
 
 ###############
@@ -41,11 +47,11 @@ function load_nbe(K, censoring_lower, censoring_upper, models_path, ci = false)
     end
 end
 
-nbe_models_path = joinpath("output", "models_nbe")
+nbe_models_path = joinpath("output", "models_nbe");
 
 ## Load the NBE model and CI using user supplied arguments
-nbe_estimator = load_nbe(K, censoring_lower, censoring_upper, nbe_models_path, false)
-nbe_estimator_ci = load_nbe(K, censoring_lower, censoring_upper, nbe_models_path, true)
+nbe_estimator = load_nbe(K, censoring_lower, censoring_upper, nbe_models_path, false);
+nbe_estimator_ci = load_nbe(K, censoring_lower, censoring_upper, nbe_models_path, true);
 
 ## Perform inference, for CI first column is 2.5% and second column is 97.5%
 nbe_median_estimates = nbe_estimator(input_data)
