@@ -1,4 +1,4 @@
-pacman::p_load(tidyverse, Rcapture, ggh4x)
+pacman::p_load(tidyverse, Rcapture, ggh4x, gridExtra)
 
 colour_map <- c(
     "NBE" = "#a6cee3",
@@ -493,6 +493,7 @@ width_plot <- comparison_df %>%
     ggplot(aes(x = Method, y = width, fill = Method)) +
     geom_boxplot(alpha = 0.5) +
     scale_fill_manual(values = colour_map) +
+    scale_y_log10() +
     theme_minimal(base_size = 14) +
     labs(x = "Method", y = "95% Credible Interval Width (Hidden Population Size)") +
     theme(
@@ -678,7 +679,7 @@ test_data <- read_csv(file.path("output", "test_data_K5.csv"))
 test_df <- lapply(1:ncol(test_data), function(i) extract_main_lists(i, test_data)) %>% 
     bind_rows()
 
-convergence_comparison <- mcmc_nbe_comparison_df %>% 
+convergence_comparison <- comparison_df %>% 
     left_join(test_df, by = "dataset") %>%
     rowwise() %>%
     mutate(
