@@ -104,7 +104,7 @@ width_plot <- ape_df %>%
     geom_boxplot(alpha = 0.6) +
     scale_fill_manual(values = colour_map) +
     theme_minimal(base_size = 14) +
-    labs(x = "Number of Neurons", y = "log APE") +
+    labs(x = "Number of Neurons", y = "Log APE") +
     facet_wrap(~Method) +
     theme(
         strip.text = element_blank(),
@@ -128,7 +128,7 @@ censoring_plot <- ape_df %>%
     geom_boxplot(alpha = 0.6) +
     scale_fill_manual(values = colour_map) +
     theme_minimal(base_size = 14) +
-    labs(x = "Censoring Threshold", y = "log APE") +
+    labs(x = "Censoring Threshold", y = "Log APE") +
     scale_x_discrete(expand = c(0.01, 0)) +
     facet_wrap(~Method) +
     theme(
@@ -154,7 +154,7 @@ n_lists_plot <- ape_df %>%
     geom_boxplot(alpha = 0.6) +
     scale_fill_manual(values = colour_map) +
     theme_minimal(base_size = 14) +
-    labs(x = "Number of Lists", y = "log APE") +
+    labs(x = "Number of Lists", y = "Log APE") +
     facet_wrap(~Method) +
     theme(
         strip.text = element_blank(),
@@ -179,7 +179,7 @@ hidden_layers_plot <- ape_df %>%
     geom_boxplot(alpha = 0.6) +
     scale_fill_manual(values = colour_map) +
     theme_minimal(base_size = 14) +
-    labs(x = "Number of Hidden Layers", y = "log APE") +
+    labs(x = "Number of Hidden Layers", y = "Log APE") +
     facet_wrap(~Method) +
     theme(
         strip.text = element_blank(),
