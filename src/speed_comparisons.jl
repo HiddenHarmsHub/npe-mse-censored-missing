@@ -175,7 +175,13 @@ test_data, test_pars = load_test_data(joinpath("output", "test_data"), 5, 0, 10)
 
 Random.seed!(42)
 n_datasets_to_sample = 100
-datasets_to_sample = rand(1:size(test_data, 2), n_datasets_to_sample)
+datasets_to_sample = Int64[]
+while length(datasets_to_sample) < n_datasets_to_sample
+    candidate = rand(1:size(test_data, 2))
+    if !(candidate in datasets_to_sample)
+        push!(datasets_to_sample, candidate)
+    end
+end
 savepath = joinpath("output", "speed_comparisons")
 datasets_to_sample = filter(datasets_to_sample) do idx
     !isfile(joinpath(savepath, "speed_comparison_dataset_$(idx).csv"))
