@@ -1,5 +1,8 @@
 pacman::p_load(tidyverse, Rcapture, ggh4x, gridExtra)
 
+figures_dir <- file.path("output", "figures")
+dir.create(figures_dir, showWarnings = FALSE, recursive = TRUE)
+
 colour_map <- c(
     "NBE" = "#a6cee3",
     "NPE" = "#1f78b4",
@@ -113,12 +116,12 @@ width_plot <- ape_df %>%
     )
 
 ggsave(
-    filename = file.path("output", "figures", "log_ape_vs_neurons.png"), 
+    filename = file.path(figures_dir, "log_ape_vs_neurons.png"), 
     plot = width_plot, width = 7, height = 5, dpi = 300
 )
 
 ## Censoring threshold sensitivity plot
-censoring_plot <- ape_df %>% 
+censoring_plot <- ape_df %>%
     filter(
         n_lists == 5, 
         train_size == train_size_fixed,
@@ -138,7 +141,7 @@ censoring_plot <- ape_df %>%
     )
 
 ggsave(
-    filename = file.path("output", "figures", "log_ape_vs_threshold.png"), 
+    filename = file.path(figures_dir, "log_ape_vs_threshold.png"), 
     plot = censoring_plot, width = 7, height = 5, dpi = 300
 )
 
@@ -163,7 +166,7 @@ n_lists_plot <- ape_df %>%
     )
 
 ggsave(
-    filename = file.path("output", "figures", "log_ape_vs_lists.png"), 
+    filename = file.path(figures_dir, "log_ape_vs_lists.png"), 
     plot = n_lists_plot, width = 7, height = 5, dpi = 300
 )
 
@@ -188,7 +191,7 @@ hidden_layers_plot <- ape_df %>%
     )
 
 ggsave(
-    filename = file.path("output", "figures", "log_ape_vs_hidden_layers.png"), 
+    filename = file.path(figures_dir, "log_ape_vs_hidden_layers.png"), 
     plot = hidden_layers_plot, width = 7, height = 5, dpi = 300
 )
 
@@ -215,64 +218,13 @@ intercept_sensitivity <- ape_df %>%
         legend.position = "top"
     )
 
-intercept_sensitivity_smoothed <- ape_df %>% 
-    filter(
-        n_lists == 5, 
-        train_size == train_size_fixed,
-        censoring_upper == 10,
-        width == 256,
-        n_hidden == 3
-    ) %>%
-    ggplot(aes(x = exp(intercept_truth), y = log(APE), col = Method)) +
-    geom_smooth(method = "loess", se = TRUE) +
-    labs(
-        x = "True hidden population size",
-        y = "Log APE",
-    ) +
-    theme_minimal(base_size = 14) +
-    theme(
-        plot.title = element_text(face = "bold"),
-        panel.grid.minor = element_blank(),
-        legend.position = "top"
-    )
-
 ggsave(
-    filename = file.path("output", "figures", "log_ape_vs_alpha.png"), 
+    filename = file.path(figures_dir, "log_ape_vs_alpha.png"), 
     plot = intercept_sensitivity, width = 7, height = 5, dpi = 300
 )
 
-## Print the table of cnesoring APEs
-censoring_summary_table <- ape_df %>% 
-    filter(
-        n_lists == 5, 
-        train_size == train_size_fixed,
-        width == 256,
-        n_hidden == 3
-    ) %>% 
-    group_by(censoring_upper) %>% 
-    summarise(
-        `1st Qu.` = quantile(APE, 0.75),
-        Median = median(APE),
-        Mean = mean(APE),
-        `3rd Qu.` = quantile(APE, 0.25)
-    ) %>%
-    pivot_longer(-censoring_upper, names_to = "Statistic", values_to = "Value") %>%
-    pivot_wider(names_from = censoring_upper, values_from = Value)
-
-## Print for latex
-censoring_summary_table %>%
-    mutate(across(where(is.numeric), ~round(., 2))) %>%
-    {
-        cat(names(.), sep = " & ")
-        cat(" \\\\\n")
-        pwalk(., ~{cat(..., sep = " & "); cat(" \\\\\n")})
-    }
-
-
-
 
 ### Compare MCMC estimates
-
 mcmc_summary_file <- file.path("output", "mcmc_summary.csv")
 mcmc_df <- read_csv(mcmc_summary_file, show_col_types = FALSE)
 
@@ -328,7 +280,6 @@ comparison_df <- mcmc_df %>%
         values_to = "Value"
     )
 
-
 point_estimates <- comparison_df %>%
     mutate(
         Metric = recode(
@@ -359,7 +310,7 @@ point_estimates <- comparison_df %>%
     )
 
 ggsave(
-    filename = file.path("output", "figures", "point_estimates_comparison.png"), 
+    filename = file.path(figures_dir, "point_estimates_comparison.png"), 
     plot = point_estimates, width = 10, height = 6, dpi = 300
 )
 
@@ -400,7 +351,7 @@ point_estimates_zoomed <- comparison_df %>%
     )
 
 ggsave(
-    filename = file.path("output", "figures", "point_estimates_comparison_zoomed.png"), 
+    filename = file.path(figures_dir, "point_estimates_comparison_zoomed.png"), 
     plot = point_estimates_zoomed, width = 10, height = 6, dpi = 300
 )
 
@@ -426,7 +377,7 @@ intercept_mcmc_convergence_plot <- comparison_df %>%
     )
 
 ggsave(
-    filename = file.path("output", "figures", "mcmc_convergence_ape.png"), 
+    filename = file.path(figures_dir, "mcmc_convergence_ape.png"), 
     plot = intercept_mcmc_convergence_plot, width = 7, height = 5, dpi = 300
 )
 
@@ -456,14 +407,12 @@ comparison_df %>%
     select(Method, Mean_error, Mean_ape, RMSE_error) %>%
     rename(
         Bias = Mean_error,
-        `Mean APE` = Mean_ape,
-        `RMSE` = RMSE_error
+        MAPE = Mean_ape,
+        RMSE = RMSE_error
     )
 
 
-## uncertainty quantification plots
-
-
+## uncertainty quantification 
 
 comparison_df %>%
     select(-c(Metric, Value)) %>%
@@ -480,34 +429,6 @@ comparison_df %>%
         coverage_par = mean(param_estimate_in_CI)
     )
 
-comparison_df %>%
-    select(-c(Metric, Value)) %>%
-    distinct() %>%
-    mutate(width = exp(upper_ci) - exp(lower_ci)) %>%
-    arrange(desc(width))
-
-width_plot <- comparison_df %>%
-    select(-c(Metric, Value)) %>%
-    distinct() %>%
-    mutate(width = exp(upper_ci) - exp(lower_ci)) %>%
-    ggplot(aes(x = Method, y = width, fill = Method)) +
-    geom_boxplot(alpha = 0.5) +
-    scale_fill_manual(values = colour_map) +
-    scale_y_log10() +
-    theme_minimal(base_size = 14) +
-    labs(x = "Method", y = "95% Credible Interval Width (Hidden Population Size)") +
-    theme(
-        plot.title = element_text(face = "bold"),
-        panel.grid.minor = element_blank(),
-        legend.position = "top"
-    )
-
-ggsave(
-    filename = file.path("output", "figures", "ci_width_comparison.png"), 
-    plot = width_plot, width = 7, height = 5, dpi = 300
-)
-
-
 coverage_df <- read_csv(
     file.path("output", "coverage_comparison_npe_mcmc.csv"),
     show_col_types = FALSE
@@ -517,7 +438,6 @@ converged_datasets <- mcmc_df %>%
     filter(parameters == "intercept", rhat <= 1.01) %>%
     pull(dataset) %>%
     unique()
-
 
 coverage_plot <- coverage_df %>%
     group_by(method, level) %>%
@@ -546,7 +466,7 @@ coverage_plot <- coverage_df %>%
     )
 
 ggsave(
-    filename = file.path("output", "figures", "coverage_comparison.png"), 
+    filename = file.path(figures_dir, "coverage_comparison.png"), 
     plot = coverage_plot, width = 7, height = 5, dpi = 300
 )
 
@@ -598,7 +518,7 @@ speed_comparison_plot <- benchmark_df %>%
     )
 
 ggsave(
-    filename = file.path("output", "figures", "speed_comparison.png"), 
+    filename = file.path(figures_dir, "speed_comparison.png"), 
     plot = last_plot(), width = 7, height = 5, dpi = 300
 )
 
@@ -619,6 +539,10 @@ lm_comparison_speed <- benchmark_df %>%
         )
     }) %>%
     mutate(slope_ms = slope * 1000)
+
+NBE_mean_inference_time <- mean(benchmark_df$time[benchmark_df$method == "NBE"])
+print(paste0("Mean inference time for NBE (ms): ", NBE_mean_inference_time * 1000))
+
 
 train_time_df <- read_csv(
     file.path("output", "speed_comparisons", "train_time_comparison.csv"),
@@ -670,7 +594,7 @@ ape_hiddenpop_lm <- comparison_df %>%
     scale_color_manual(values = colour_map)
 
 ggsave(
-    filename = file.path("output", "figures", "ape_hiddenpop_combined.png"), 
+    filename = file.path(figures_dir, "ape_hiddenpop_combined.png"), 
     plot = gridExtra::grid.arrange(ape_hiddenpop_points, ape_hiddenpop_lm, ncol = 2), 
     width = 14, height = 6, dpi = 300
 )
@@ -717,7 +641,7 @@ convergence_comparison <- comparison_df %>%
     )
 
 ggsave(
-    filename = file.path("output", "figures", "convergence_comparison.png"), 
+    filename = file.path(figures_dir, "convergence_comparison.png"), 
     plot = convergence_comparison, width = 7, height = 5, dpi = 300
 )
 
@@ -891,7 +815,7 @@ silverman_estimate_comparison <- silverman_combined_samples %>%
 
 
 ggsave(
-    filename = file.path("output", "figures", "silverman_parameter_estimate_comparison.png"), 
+    filename = file.path(figures_dir, "silverman_parameter_estimate_comparison.png"), 
     plot = silverman_estimate_comparison, width = 10, height = 8, dpi = 300
 )
 
@@ -934,7 +858,7 @@ ppd_silverman <- ppd_silverman_npe_df %>%
 
 
 ggsave(
-    filename = file.path("output", "figures", "silverman_ppd_npe.png"), 
+    filename = file.path(figures_dir, "silverman_ppd_npe.png"), 
     plot = ppd_silverman, width = 10, height = 8, dpi = 300
 )
 
@@ -1124,7 +1048,7 @@ king_estimate_comparison <- king_combined_samples %>%
     )
 
 ggsave(
-    filename = file.path("output", "figures", "king_parameter_estimate_comparison.png"), 
+    filename = file.path(figures_dir, "king_parameter_estimate_comparison.png"), 
     plot = king_estimate_comparison, width = 10, height = 8, dpi = 300
 )
 
@@ -1176,7 +1100,7 @@ ppd_king <- ppd_king_npe_df %>%
 
 
 ggsave(
-    filename = file.path("output", "figures", "king_ppd_npe.png"), 
+    filename = file.path(figures_dir, "king_ppd_npe.png"), 
     plot = ppd_king, width = 10, height = 8, dpi = 300
 )
 
