@@ -555,7 +555,8 @@ benchmark_files <- list.files(
     path = file.path("output", "speed_comparisons"), 
     pattern = "*.csv", 
     full.names = TRUE
-)
+) %>%
+    .[!grepl("train_time_comparison", .)]
 
 benchmark_df <- lapply(benchmark_files, function(benchmark_file) {
     benchmark_df <- read_csv(benchmark_file, show_col_types = FALSE)
@@ -619,7 +620,17 @@ lm_comparison_speed <- benchmark_df %>%
     }) %>%
     mutate(slope_ms = slope * 1000)
 
+train_time_df <- read_csv(
+    file.path("output", "speed_comparisons", "train_time_comparison.csv"),
+    show_col_types = FALSE
+)
 
+train_time_df %>%
+    group_by(method) %>%
+    summarise(
+        mean_time = mean(train_time),
+        sd_time = sd(train_time)
+    )
 
 
 ape_hiddenpop_points <- comparison_df %>%
