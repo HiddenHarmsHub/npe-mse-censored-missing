@@ -49,4 +49,4 @@ Please see the references in the paper for more details on these datasets.
 
 ## Notes
 
-- This code is intended to be run on a slurm cluster, hence the various distributed computing setups. If you wish to run the code locally, you may need to modify the distributed computing parts accordingly (i.e. remove `using Distributed` and `using SlurmClusterManager` lines, and replace `@distributed` loops with standard `for` loops).
+- This code is intended to be run on a slurm cluster, hence the various distributed computing setups. If you wish to run the code locally, you may need to modify the distributed computing parts accordingly (i.e. remove `using Distributed` and `using SlurmClusterManager` lines, and replace `@distributed` pmaps with standard maps).
