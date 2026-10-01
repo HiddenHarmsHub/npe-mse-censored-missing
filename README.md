@@ -17,11 +17,9 @@ The `src/` directory contains the following files:
 
 - **`simulation_study.jl`**: Evaluates trained NBE and NPE models on fixed test datasets across different list sizes (3-15 lists) and censoring configurations. Generates intercept estimates comparing NPE, NBE, and true values.
 
-- **`combine_simulation_study_results.jl`**: Aggregates simulation study results from multiple intercept estimate CSV files into a single consolidated dataset for analysis.
+- **`combine_results.jl`**: Aggregates the per-file simulation study outputs (intercept estimates, MCMC summaries and NPE summaries) into single consolidated CSVs in `output/` for analysis.
 
 ### Analysis Scripts
-
-- **`analyse_mcmc_samples.R`**: R script for analyzing MCMC samples, including diagnostic checks (Rhat values), visualization of trace plots, and comparison of MCMC estimates with true parameter values.
 
 - **`mcmc_simulation_study.jl`**: Runs MCMC inference on test datasets to obtain posterior samples for comparison with neural estimation methods. Parallelized using distributed computing.
 
@@ -37,16 +35,20 @@ The `src/` directory contains the following files:
 
 - **`plots.R`**: Contains all the code to produce the plots in the paper.
 
+### Usage Example
+
+- **`usage_example.jl`**: Shows how to run inference on your own count data with the trained 5-list NBE (point estimates and 95% intervals) and NPE (posterior samples) models in `output/models_nbe/` and `output/models_npe/`.
+
 ## Data
 
 The `data/` directory contains:
 
 - **`silverman_5.csv`**: The modern slavery dataset with 5 lists.
-- **`king_data.csv`**: The King dataset used in MSE studies.
+- **`king.csv`**: The King dataset used in MSE studies.
 
 Please see the references in the paper for more details on these datasets.
 
 
 ## Notes
 
-- This code is intended to be run on a slurm cluster, hence the various distributed computing setups. If you wish to run the code locally, you may need to modify the distributed computing parts accordingly (i.e. remove `using Distributed` and `using SlurmClusterManager` lines, and replace `@distributed` pmaps with standard maps).
+- This code is intended to be run on a slurm cluster, hence the various distributed computing setups. If you wish to run the code locally, you may need to modify the distributed computing parts accordingly (i.e. remove the `using Distributed, SlurmClusterManager` and `addprocs(SlurmManager(); ...)` lines, drop the `@everywhere` macros, and replace `pmap` calls with standard `map`).
