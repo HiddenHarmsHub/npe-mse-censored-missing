@@ -15,10 +15,12 @@ test_size = 10_000
 test_path = joinpath("output", "test_data")
 mkpath(test_path)
 list_sizes = [3, 4, 5, 6, 10, 15]
-## Raw counts (Z_counts) are stored alongside the log-counts for the MCMC samplers.
+## Raw counts (Z_counts) are stored alongside the log-counts for the MCMC samplers, for K <= 10 only:
+## BSON cannot write arrays above 2^31 bytes and the K=15 counts are 2.6 GB.
 ## All list sizes share one RNG stream, so either every file is kept or all are regenerated.
+counts_sizes = filter(<=(10), list_sizes)
 test_files = [joinpath(test_path, "test_data_$(K).bson") for K in list_sizes]
-if all(f -> isfile(f) && haskey(BSON.load(f), :Z_counts), test_files)
+if all(isfile, test_files) && all(K -> haskey(BSON.load(joinpath(test_path, "test_data_$(K).bson")), :Z_counts), counts_sizes)
     println("Test data with raw counts already exists; skipping.")
 else
     Random.seed!(42)  # For reproducibility
@@ -36,7 +38,11 @@ else
             (old[:params] == params && old[:Z_test] == Z_test) || error("Regenerated test data for K=$K differs from $outfile.")
         end
 
-        BSON.@save outfile Z_test Z_counts params
+        if K in counts_sizes
+            BSON.@save outfile Z_test Z_counts params
+        else
+            BSON.@save outfile Z_test params
+        end
         println("Generated test data for K=$K")
     end
 end
