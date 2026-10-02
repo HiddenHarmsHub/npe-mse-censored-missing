@@ -1,21 +1,20 @@
 ## Prior specification, induced model-size priors, prior-predictive summaries, and domain checks
 ## locating the Silverman (system A) and King (system B) data within the training distribution.
-## Run locally: julia --project src/model_selection_prior_predictive.jl
+## Run locally: MS_RUN=<run> julia --project src/model_selection_prior_predictive.jl
 ## The embedding check uses classifier replicate 1 when it has been trained, and is skipped otherwise.
 include("mse_functions.jl")
 include("model_selection_functions.jl")
 
-gamma_sd = 4
-train_size = 100_000
+run = model_selection_run()
 n_prior_predictive = 20_000
 n_embedding_reference = 5000
 n_embedding_holdout = 500
 
-output_path = joinpath("output", "model_selection", "prior_predictive")
+output_path = joinpath(model_selection_output_path(run), "prior_predictive")
 mkpath(output_path)
 
 ## ---- Prior specification ----
-priors = coefficient_priors(gamma_sd)
+priors = coefficient_priors(run)
 CSV.write(joinpath(output_path, "prior_specification.csv"), DataFrame(
     component = ["intercept α", "main effects β_k", "interactions γ_kl (latent)", "structure m (primary)", "structure m (sparse)", "structure m (uniform)"],
     prior = [string(priors.intercept_dist), string(priors.beta_dist), string(priors.gamma_dist),
@@ -61,7 +60,7 @@ quantile_rows, domain_rows = NamedTuple[], NamedTuple[]
 for s in ["A", "B"]
     system = model_selection_systems[s]
     Random.seed!(s == "A" ? 101 : 102)
-    sim = simulate_model_selection_data(n_prior_predictive, system; gamma_sd)
+    sim = simulate_model_selection_data(n_prior_predictive, system; priors)
     summaries = DataFrame([data_summaries(c, system.K) for c in eachcol(sim.counts_obs)])
     summaries.N0 = sim.N0
     summaries.N = sim.N
@@ -83,8 +82,8 @@ for s in ["A", "B"]
 
     ## Nearest-neighbour distance in the classifier's learned summary space, relative to the
     ## same distance for held-out prior-predictive datasets
-    config = try model_selection_config(system; train_size, gamma_sd) catch; nothing end
-    if !isnothing(config) && isfile(joinpath(model_selection_models_path, classifier_filename(config, 1)))
+    config = try model_selection_config(system, run) catch; nothing end
+    if !isnothing(config) && isfile(joinpath(models_path(config), classifier_filename(config, 1)))
         embed = load_classifier(config, 1).network[1:end-1]
         E = embed(sim.y[:, 1:n_embedding_reference])
         μ, σ = mean(E, dims = 2), std(E, dims = 2) .+ 1f-6

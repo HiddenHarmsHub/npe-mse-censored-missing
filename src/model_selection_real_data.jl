@@ -1,16 +1,16 @@
 ## Model-averaged reanalysis of the Silverman (system A: K=5, uncensored) and King (system B: K=4,
 ## cells in [1, 4] suppressed) data with the structure classifier and conditional NPE, compared with
 ## conditional fits, the fixed-model NPE, reference model averaging by enumeration, and the MLE.
-## Run locally: julia --project src/model_selection_real_data.jl
+## The primary neural results use the ensemble of the three replicates; each replicate is also reported.
+## Run locally: MS_RUN=<run> julia --project src/model_selection_real_data.jl
 include("mse_functions.jl")
 include("mcmc_functions.jl")
 include("model_selection_functions.jl")
 include("model_selection_reference.jl")
 using Optim
 
-gamma_sd = 4
-train_size = 100_000
-replicates = 1:3
+run = model_selection_run()
+replicates = ensemble_replicates
 n_draws = 20_000
 n_decomposition_draws = 1000
 decomposition_mass = 0.999
@@ -25,7 +25,7 @@ literature_models = Dict(
     "B" => Dict{String, Vector{String}}(),
 )
 
-output_path = joinpath("output", "model_selection", "real_data")
+output_path = joinpath(model_selection_output_path(run), "real_data")
 mkpath(output_path)
 selected = CSV.read(joinpath("output", "architecture_selection", "selected.csv"), DataFrame)
 
@@ -40,7 +40,7 @@ population_rows(method, d) = [merge((method = method, quantity = String(q)), sum
 for s in ["A", "B"]
     system = model_selection_systems[s]
     K, J = system.K, binomial(system.K, 2)
-    config = model_selection_config(system; train_size, gamma_sd)
+    config = model_selection_config(system, run)
     primary = BetaBinomialModelPrior(config.a, config.b)
     all_priors = merge(Dict("primary" => primary), sensitivity_model_priors)
     counts_obs = real_data[s]
@@ -49,11 +49,13 @@ for s in ["A", "B"]
     labels = [model_label(model_mask(c, K), K) for c in 1:n_models(K)]
     Random.seed!(s == "A" ? 2020 : 2021)
 
-    ## ---- Structure posteriors: neural (every replicate and prior) and reference ----
-    π_neural = Dict(rep => model_probabilities(load_classifier(config, rep), y) for rep in replicates)
-    π_prior = Dict(name => reweight_model_probs(π_neural[1], primary, prior, K) for (name, prior) in all_priors)
+    ## ---- Structure posteriors: neural (ensemble, every replicate, every prior) and reference ----
+    classifiers = load_classifier(config, 0)
+    π_neural = Dict(rep => model_probabilities(classifiers[rep], y) for rep in replicates)
+    π_ensemble = model_probabilities(classifiers, y)
+    π_prior = Dict(name => reweight_model_probs(π_ensemble, primary, prior, K) for (name, prior) in all_priors)
     println("System $s: enumerating reference evidences for $(n_models(K)) structures")
-    fits = reference_evidences(counts_obs, system; gamma_sd, n_draws = n_reference_draws)
+    fits = reference_evidences(counts_obs, system; priors = coefficient_priors(run), n_draws = n_reference_draws)
     reference = Dict(name => reference_mixture(fits, counts_obs, system; model_prior = prior, B = n_draws) for (name, prior) in all_priors)
 
     probs = DataFrame(model = 1:n_models(K), label = labels, size = [model_size(model_mask(c, K)) for c in 1:n_models(K)],
@@ -71,6 +73,7 @@ for s in ["A", "B"]
     masks = enumerate_models(K)
     sizes = vec(sum(masks, dims = 1))
     inclusion_rows, size_rows = NamedTuple[], NamedTuple[]
+    ## neural_* without a replicate suffix is the ensemble
     for (label, π) in vcat([("neural_$n", p) for (n, p) in π_prior], [("reference_$n", r.π) for (n, r) in reference],
                            [("neural_primary_rep$rep", π_neural[rep]) for rep in replicates])
         append!(inclusion_rows, [(method = label, pair = p, prob = v) for (p, v) in zip(pair_names, masks * π)])
@@ -80,26 +83,29 @@ for s in ["A", "B"]
     CSV.write(joinpath(output_path, "$(s)_model_size.csv"), DataFrame(size_rows))
 
     ## ---- Population size: model averaged and conditional ----
-    cnpe = Dict(rep => load_cnpe(config, rep) for rep in replicates)
+    cnpe_ensemble = load_cnpe(config, 0)
     rows = NamedTuple[]
-    bma = sample_model_averaged_posterior(cnpe[1], y, π_neural[1], n_draws, system; counts_obs)
+    bma = sample_model_averaged_posterior(cnpe_ensemble, y, π_ensemble, n_draws, system; counts_obs)
     append!(rows, population_rows("neural_bma", bma))
-    for rep in replicates[2:end]
-        append!(rows, population_rows("neural_bma_rep$rep", sample_model_averaged_posterior(cnpe[rep], y, π_neural[rep], n_draws, system; counts_obs)))
+    for rep in replicates
+        append!(rows, population_rows("neural_bma_rep$rep", sample_model_averaged_posterior(cnpe_ensemble[rep], y, π_neural[rep], n_draws, system; counts_obs)))
     end
     for (name, _) in sensitivity_model_priors
-        append!(rows, population_rows("neural_bma_$name", sample_model_averaged_posterior(cnpe[1], y, π_prior[name], n_draws, system; counts_obs)))
+        append!(rows, population_rows("neural_bma_$name", sample_model_averaged_posterior(cnpe_ensemble, y, π_prior[name], n_draws, system; counts_obs)))
     end
-    map_index = argmax(π_neural[1])
+    map_index = argmax(π_ensemble)
     conditional = Dict("all interactions" => trues(J), "MAP ($(labels[map_index]))" => model_mask(map_index, K),
                        ["literature: $n" => mask_from_pairs(p, K) for (n, p) in literature_models[s]]...)
     for (name, mask) in conditional
-        append!(rows, population_rows("neural_conditional: $name", sample_conditional_population(cnpe[1], y, mask, n_draws, system; counts_obs)))
+        append!(rows, population_rows("neural_conditional: $name", sample_conditional_population(cnpe_ensemble, y, mask, n_draws, system; counts_obs)))
     end
-    row = only(eachrow(filter(r -> r.n_lists == K && r.censoring_upper == system.censoring_upper, selected)))
-    fixed_npe = BSON.load(joinpath("output", "models_npe", row.model_file))[:estimator]
-    θ_fixed = bounded_draws(fixed_npe, reshape(y, :, 1), n_draws)
-    append!(rows, population_rows("fixed_model_npe", population_draws(θ_fixed, counts_obs; system.censoring_lower, system.censoring_upper)))
+    ## The fixed-model NPE was trained under the original priors, so it is compared only in runs that use them
+    if original_priors(run)
+        row = only(eachrow(filter(r -> r.n_lists == K && r.censoring_upper == system.censoring_upper, selected)))
+        fixed_npe = BSON.load(joinpath("output", "models_npe", row.model_file))[:estimator]
+        θ_fixed = bounded_draws(fixed_npe, reshape(y, :, 1), n_draws)
+        append!(rows, population_rows("fixed_model_npe", population_draws(θ_fixed, counts_obs; system.censoring_lower, system.censoring_upper)))
+    end
     for (name, r) in reference
         append!(rows, population_rows(name == "primary" ? "reference_bma" : "reference_bma_$name", r))
     end
@@ -110,13 +116,13 @@ for s in ["A", "B"]
     CSV.write(joinpath(output_path, "$(s)_bma_draws.csv"), DataFrame(model = bma.models, label = labels[bma.models], alpha = bma.alpha, N0 = bma.N0, N = bma.N))
 
     ## ---- Within- and between-structure variance, from dedicated draws of the leading structures ----
-    order = sortperm(π_neural[1], rev = true)
-    top = order[1:min(searchsortedfirst(cumsum(π_neural[1][order]), decomposition_mass), max_decomposition_models)]
-    per_model = [sample_conditional_population(cnpe[1], y, model_mask(c, K), n_decomposition_draws, system; counts_obs) for c in top]
-    groups = reduce(vcat, [fill(c, n_decomposition_draws) for c in top])
-    weights = Dict(c => π_neural[1][c] for c in top)
+    order = sortperm(π_ensemble, rev = true)
+    top = order[1:min(searchsortedfirst(cumsum(π_ensemble[order]), decomposition_mass), max_decomposition_models)]
+    per_model = [sample_conditional_population(cnpe_ensemble, y, model_mask(c, K), n_decomposition_draws, system; counts_obs) for c in top]
+    groups = reduce(vcat, [fill(c, length(d.N0)) for (c, d) in zip(top, per_model)])
+    weights = Dict(c => π_ensemble[c] for c in top)
     CSV.write(joinpath(output_path, "$(s)_variance_decomposition.csv"), DataFrame([
-        merge((quantity = q, n_models = length(top), mass = sum(π_neural[1][top])),
+        merge((quantity = q, n_models = length(top), mass = sum(π_ensemble[top])),
               variance_decomposition(reduce(vcat, [Float64.(getproperty(d, Symbol(q))) for d in per_model]), groups; weights))
         for q in ["N0", "N", "alpha"]]))
 
@@ -136,7 +142,7 @@ for s in ["A", "B"]
     for (name, mask) in [("MAP ($(labels[map_index]))", model_mask(map_index, K)), ("all interactions", trues(J))]
         Xm = X[:, vcat(trues(1 + K), mask)]
         negloglik(θ) = -likelihood_censored(counts_obs, θ, Xm, system.censoring_lower, system.censoring_upper)
-        start = log_count_start(counts_obs, Xm, system.censoring_lower, system.censoring_upper, coefficient_priors(gamma_sd)...; K)
+        start = log_count_start(counts_obs, Xm, system.censoring_lower, system.censoring_upper, coefficient_priors(run)...; K)
         result = optimize(negloglik, start, BFGS(), autodiff = :forward)
         θ̂ = Optim.minimizer(result)
         H = ForwardDiff.hessian(negloglik, θ̂)

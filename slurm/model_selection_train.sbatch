@@ -3,7 +3,7 @@
 #SBATCH --ntasks=12
 #SBATCH --cpus-per-task=1
 #SBATCH --mem-per-cpu=8G
-#SBATCH --time=24:00:00
+#SBATCH --time=48:00:00
 #SBATCH --output=slurm_output/%x_%j.out
 #SBATCH --mail-type=ALL
 #SBATCH --mail-user=j.s.marsh@bham.ac.uk

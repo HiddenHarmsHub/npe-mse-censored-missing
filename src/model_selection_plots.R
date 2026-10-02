@@ -1,10 +1,13 @@
-## Figures for the model-selection study. Reads output/model_selection/*.csv (from
-## model_selection_combine.jl and model_selection_real_data.jl), writes PNGs to output/figures/
+## Figures for the model-selection study. Reads the CSVs written by model_selection_combine.jl and
+## model_selection_real_data.jl for the run named by MS_RUN (default b4_g4), writes PNGs to output/figures/
 pacman::p_load(tidyverse)
 
-input_dir <- file.path("output", "model_selection")
+run <- Sys.getenv("MS_RUN", "b4_g4")
+input_dir <- if (run == "b4_g4") file.path("output", "model_selection") else file.path("output", paste0("model_selection_", run))
 figures_dir <- file.path("output", "figures")
 dir.create(figures_dir, showWarnings = FALSE, recursive = TRUE)
+## Neural results for the ensemble of replicates (rep 0) when present, otherwise replicate 1
+plot_rep <- function(df) if (0 %in% df$rep) 0 else 1
 
 ## Fixed categorical order, validated for colour-vision deficiency on a light surface; two slots sit
 ## below 3:1 contrast, so every series also gets its own point shape
@@ -22,14 +25,16 @@ system_labels <- c(A = "A: five lists, uncensored", B = "B: four lists, censored
 theme_set(theme_bw(base_size = 11) + theme(panel.grid.minor = element_blank(), legend.position = "bottom"))
 
 save_figure <- function(plot, name, width = 8, height = 4.5) {
+    if (run != "b4_g4") name <- sub("\\.png$", paste0("_", run, ".png"), name)
     ggsave(file.path(figures_dir, name), plot, width = width, height = height, dpi = 300)
 }
 
 ## ---- Inclusion-probability reliability ----
 reliability_file <- file.path(input_dir, "inclusion_reliability.csv")
 if (file.exists(reliability_file)) {
-    reliability <- read_csv(reliability_file, show_col_types = FALSE) |>
-        filter(rep == 1) |>
+    reliability <- read_csv(reliability_file, show_col_types = FALSE)
+    reliability <- reliability |>
+        filter(rep == plot_rep(reliability)) |>
         mutate(system = system_labels[system])
     p <- ggplot(reliability, aes(mean_predicted, frequency)) +
         geom_abline(linetype = "dashed", colour = "grey50") +
@@ -44,8 +49,9 @@ if (file.exists(reliability_file)) {
 ## ---- Structure credible-set coverage ----
 structure_file <- file.path(input_dir, "structure_summary.csv")
 if (file.exists(structure_file)) {
-    sets <- read_csv(structure_file, show_col_types = FALSE) |>
-        filter(rep == 1) |>
+    sets <- read_csv(structure_file, show_col_types = FALSE)
+    sets <- sets |>
+        filter(rep == plot_rep(sets)) |>
         pivot_longer(starts_with("set_coverage_"), names_to = "level", values_to = "coverage") |>
         mutate(level = as.numeric(str_remove(level, "set_coverage_")) / 100, system = system_labels[system])
     p <- ggplot(sets, aes(level, coverage)) +
@@ -61,8 +67,9 @@ if (file.exists(structure_file)) {
 ## ---- Coverage of N0 and N intervals by method ----
 population_file <- file.path(input_dir, "population_summary.csv")
 if (file.exists(population_file)) {
-    coverage <- read_csv(population_file, show_col_types = FALSE) |>
-        filter(rep == 1, target_prior == "primary", method %in% names(method_labels), quantity %in% c("N0", "N")) |>
+    coverage <- read_csv(population_file, show_col_types = FALSE)
+    coverage <- coverage |>
+        filter(rep == plot_rep(coverage), target_prior == "primary", method %in% names(method_labels), quantity %in% c("N0", "N")) |>
         pivot_longer(starts_with("coverage_"), names_to = "level", values_to = "coverage") |>
         mutate(
             level = as.numeric(str_remove(level, "coverage_")) / 100,
@@ -119,4 +126,41 @@ if (nrow(real_population) > 0) {
         facet_wrap(~system, scales = "free") +
         labs(x = "Total population N (posterior median and 95% interval)", y = NULL)
     save_figure(p, "model_selection_real_population.png", width = 9, height = 5)
+}
+
+## ---- Comparison across runs (coefficient priors), from model_selection_compare_runs.jl ----
+comparison_dir <- file.path("output", "model_selection_comparison")
+## Up to four runs: fixed hue order, plus a shape per run because two of the hues are low-contrast
+prior_colours <- c("#2a78d6", "#eb6834", "#1baf7a", "#eda100")
+prior_shapes <- c(16, 17, 15, 18)
+if (file.exists(file.path(comparison_dir, "real_data_population.csv"))) {
+    totals <- read_csv(file.path(comparison_dir, "real_data_population.csv"), show_col_types = FALSE) |>
+        filter(quantity == "N", method %in% c("neural_bma", "reference_bma")) |>
+        mutate(system = factor(real_labels[system], levels = real_labels),
+               method = factor(c(neural_bma = "Neural model average", reference_bma = "Reference (enumeration)")[method],
+                               levels = c("Neural model average", "Reference (enumeration)")),
+               prior = fct_inorder(prior))
+    p <- ggplot(totals, aes(median, prior, colour = method, shape = method)) +
+        geom_linerange(aes(xmin = q025, xmax = q975), linewidth = 0.7, position = position_dodge(width = 0.5)) +
+        geom_point(size = 2.2, position = position_dodge(width = 0.5)) +
+        facet_wrap(~system, scales = "free_x") +
+        scale_colour_manual(values = unname(method_colours[1:2]), name = NULL) +
+        scale_shape_manual(values = c(16, 17), name = NULL) +
+        labs(x = "Total population N (posterior median and 95% interval)", y = NULL)
+    ggsave(file.path(figures_dir, "model_selection_prior_comparison_population.png"), p, width = 9, height = 4, dpi = 300)
+
+    inclusion <- read_csv(file.path(comparison_dir, "real_data_inclusion.csv"), show_col_types = FALSE, col_types = cols(pair = col_character())) |>
+        filter(method %in% c("neural_primary", "reference_primary")) |>
+        mutate(system = factor(real_labels[system], levels = real_labels),
+               source = factor(c(neural_primary = "Neural", reference_primary = "Reference")[method], levels = c("Neural", "Reference")),
+               prior = fct_inorder(prior), pair = paste0("γ[", pair, "]"))
+    n_priors <- nlevels(inclusion$prior)
+    p <- ggplot(inclusion, aes(pair, prob, colour = prior, shape = prior)) +
+        geom_point(size = 2.2, position = position_dodge(width = 0.6)) +
+        facet_grid(source ~ system, scales = "free_x", space = "free_x") +
+        scale_colour_manual(values = prior_colours[seq_len(n_priors)], name = NULL) +
+        scale_shape_manual(values = prior_shapes[seq_len(n_priors)], name = NULL) +
+        scale_y_continuous(limits = c(0, 1)) +
+        labs(x = NULL, y = "Posterior inclusion probability")
+    ggsave(file.path(figures_dir, "model_selection_prior_comparison_inclusion.png"), p, width = 10, height = 5.5, dpi = 300)
 }

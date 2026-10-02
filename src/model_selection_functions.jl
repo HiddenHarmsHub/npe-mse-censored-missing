@@ -66,7 +66,7 @@ function effective_parameters(θ, mask)
     return θ_eff
 end
 
-coefficient_priors(gamma_sd) = (intercept_dist = Uniform(1, 10), beta_dist = Normal(0, 4), gamma_dist = Normal(0, gamma_sd))
+coefficient_priors(; beta_mean = 0, beta_sd = 4, gamma_sd = 4) = (intercept_dist = Uniform(1, 10), beta_dist = Normal(beta_mean, beta_sd), gamma_dist = Normal(0, gamma_sd))
 
 ## Raw counts with censored cells replaced by -1, as in load_test_counts
 censor_counts(Z, censoring_lower, censoring_upper) =
@@ -89,9 +89,8 @@ function load_king_counts()
 end
 
 ## Prior-predictive draws of (structure, latent parameters, raw counts, realised N0)
-function simulate_model_selection_data(n, system; model_prior = primary_model_prior, gamma_sd = 4)
+function simulate_model_selection_data(n, system; model_prior = primary_model_prior, priors = coefficient_priors())
     (; K, censoring_lower, censoring_upper) = system
-    priors = coefficient_priors(gamma_sd)
     masks = reduce(hcat, [sample_model(model_prior, K) for _ in 1:n])
     pars = reduce(hcat, [sample_parameters(K; priors...) for _ in 1:n])
     counts = Int.(reduce(hcat, [simulate_data(effective_parameters(p, m), 1, log_transform = false) for (p, m) in zip(eachcol(pars), eachcol(masks))]))
@@ -138,19 +137,76 @@ n_inputs(system) = (2^system.K - 1) * (system.censoring_upper > 0 ? 2 : 1)
 
 mlp_trunk(n_in, width, n_hidden) = [Dense(n_in, width, relu), [Dense(width, width, relu) for _ in 1:n_hidden]...]
 
-## config: a system plus (width, n_hidden, encoding_dim, train_size, a, b, gamma_sd)
-classifier_filename(c, rep) = "classifier_$(c.K)_$(c.width)_$(c.n_hidden)_$(c.train_size)_$(c.censoring_lower)_$(c.censoring_upper)_$(c.a)_$(c.b)_$(c.gamma_sd)_$(rep).bson"
-cnpe_filename(c, rep) = "cnpe_$(c.K)_$(c.width)_$(c.n_hidden)_$(c.encoding_dim)_$(c.train_size)_$(c.censoring_lower)_$(c.censoring_upper)_$(c.gamma_sd)_$(rep).bson"
+## ---- Runs ----
+## Training settings for the retraining runs. The conditional NPE's validation loss was noisy and early
+## stopping halted it after 39-67 epochs while still improving, with one blow-up: so a larger validation
+## set, patience of 50 epochs, gradient-norm clipping and a lower learning rate. The 5-list classifier was
+## still improving at epoch 200 and much less sharp than the reference: so 400 epochs and width 256
+## (classifier-only tuning on simulated data, as the implementation plan allows).
+const retraining_settings = (
+    classifier = (train_size = 100_000, epochs = 400, stopping_epochs = 50, batchsize = 64, lr = 5e-4, clip = 1.0, K_val = 50_000, width = Dict("A" => 256)),
+    cnpe = (train_size = 100_000, epochs = 200, stopping_epochs = 50, batchsize = 32, lr = 2e-4, clip = 1.0, K_val = 50_000),
+)
 
-const model_selection_models_path = joinpath("output", "models_model_selection")
+## Each named run fixes the coefficient priors and the training settings and has its own folders,
+## so runs never overwrite each other. Scripts pick a run with the MS_RUN environment variable.
+## `label` names the run in comparison tables and figures.
+## A classifier `width` of `nothing` keeps the frozen base width; K_val = nothing keeps the default K ÷ 5 + 1.
+const model_selection_runs = Dict(
+    ## Original run: β, γ ~ N(0, 4²); NeuralEstimators defaults (Adam 5e-4, early stopping after 10 epochs)
+    "b4_g4" => (run = "b4_g4", label = "N(0, 4²), original training", beta_mean = 0, beta_sd = 4, gamma_sd = 4,
+        classifier = (train_size = 100_000, epochs = 200, stopping_epochs = 10, batchsize = 32, lr = 5e-4, clip = nothing, K_val = nothing, width = Dict{String, Int}()),
+        cnpe = (train_size = 100_000, epochs = 200, stopping_epochs = 10, batchsize = 32, lr = 5e-4, clip = nothing, K_val = nothing)),
+    ## The original priors retrained with the new settings, so prior and training effects can be separated
+    "b4_g4r" => (run = "b4_g4r", label = "N(0, 4²), retrained", beta_mean = 0, beta_sd = 4, gamma_sd = 4, retraining_settings...),
+    ## Prior sensitivity: β, γ ~ N(0, 2²) and N(0, 1), with the same training settings
+    "b2_g2" => (run = "b2_g2", label = "N(0, 2²)", beta_mean = 0, beta_sd = 2, gamma_sd = 2, retraining_settings...),
+    "b1_g1" => (run = "b1_g1", label = "N(0, 1)", beta_mean = 0, beta_sd = 1, gamma_sd = 1, retraining_settings...),
+)
+model_selection_run(name = get(ENV, "MS_RUN", "b4_g4")) = model_selection_runs[name]
+
+## The original run keeps its original folders
+model_selection_output_path(run) = run.run == "b4_g4" ? joinpath("output", "model_selection") : joinpath("output", "model_selection_$(run.run)")
+model_selection_models_path(run) = run.run == "b4_g4" ? joinpath("output", "models_model_selection") : joinpath("output", "models_model_selection_$(run.run)")
+model_selection_test_file(run, system) = joinpath(model_selection_output_path(run), "test_data_$(system.system).bson")
+## From a run or a config built from one
+coefficient_priors(run::NamedTuple) = coefficient_priors(; run.beta_mean, run.beta_sd, run.gamma_sd)
+## The fixed-model NPEs and the reference MCMC of the original analysis use these priors
+original_priors(run) = run.beta_mean == 0 && run.beta_sd == 4 && run.gamma_sd == 4
+
+## A system completed with the frozen base architecture, the model prior, the run's priors and training settings
+function model_selection_config(system, run = model_selection_run(); selected_path = joinpath("output", "architecture_selection", "selected.csv"), a = 1, b = 1, encoding_dim = 128)
+    selected = CSV.read(selected_path, DataFrame)
+    row = only(eachrow(filter(r -> r.n_lists == system.K && r.censoring_lower == system.censoring_lower && r.censoring_upper == system.censoring_upper, selected)))
+    classifier = merge(run.classifier, (width = get(run.classifier.width, system.system, row.width),))
+    return (; system..., width = row.width, n_hidden = row.n_hidden, encoding_dim, a, b, run.run, run.beta_mean, run.beta_sd, run.gamma_sd, classifier, run.cnpe)
+end
+
+## The β prior is not in the names; it is fixed by the run's folder
+classifier_filename(c, rep) = "classifier_$(c.K)_$(c.classifier.width)_$(c.n_hidden)_$(c.classifier.train_size)_$(c.censoring_lower)_$(c.censoring_upper)_$(c.a)_$(c.b)_$(c.gamma_sd)_$(rep).bson"
+cnpe_filename(c, rep) = "cnpe_$(c.K)_$(c.width)_$(c.n_hidden)_$(c.encoding_dim)_$(c.cnpe.train_size)_$(c.censoring_lower)_$(c.censoring_upper)_$(c.gamma_sd)_$(rep).bson"
+models_path(c) = model_selection_models_path(model_selection_runs[c.run])
 
 ## Keep the loss history and training time, drop the per-epoch network snapshots
 prune_training_log(dir) = foreach(f -> occursin(r"network.*\.bson", f) && rm(joinpath(dir, f)), readdir(dir))
 
-function train_classifier(config, rep; savepath = model_selection_models_path, epochs = 200, stopping_epochs = 10, batchsize = 32, seed = 1000 * rep + config.K)
+## NeuralEstimators reads the learning rate from `rule.eta`, which an OptimiserChain does not have
+NeuralEstimators.findlr(opt::Flux.Optimisers.Leaf{<:Flux.Optimisers.OptimiserChain}) = last(opt.rule.opts).eta
+
+## Training keyword arguments from a run's settings: Adam, optionally after gradient-norm clipping,
+## with NeuralEstimators' default cosine-annealed learning rate
+function training_options(settings, estimator)
+    rule = isnothing(settings.clip) ? Flux.Adam(settings.lr) : Flux.Optimisers.OptimiserChain(Flux.Optimisers.ClipNorm(settings.clip), Flux.Adam(settings.lr))
+    options = (K = settings.train_size, m = 1, settings.epochs, settings.stopping_epochs, settings.batchsize,
+               optimiser = Flux.setup(rule, estimator),
+               lr_schedule = NeuralEstimators.ParameterSchedulers.CosAnneal(settings.lr, 0.0, settings.epochs, false))
+    return isnothing(settings.K_val) ? options : merge(options, (K_val = settings.K_val,))
+end
+
+function train_classifier(config, rep; savepath = models_path(config), seed = 1000 * rep + config.K)
     Random.seed!(seed)
     model_prior = BetaBinomialModelPrior(config.a, config.b)
-    priors = coefficient_priors(config.gamma_sd)
+    priors = coefficient_priors(config)
     M = n_models(config.K)
     function sampler(n)
         masks, pars = sample_structures(n, config.K, model_prior, priors)
@@ -161,52 +217,43 @@ function train_classifier(config, rep; savepath = model_selection_models_path, e
         return ClassifierParams(labels, pars, masks)
     end
     simulator(p, _) = simulate_structures(p.pars, p.masks, config)
-    network = Chain(mlp_trunk(n_inputs(config), config.width, config.n_hidden)..., Dense(config.width, M))
-    estimator = train(
-        PointEstimator(network), sampler, simulator;
-        K = config.train_size, m = 1, epochs, stopping_epochs, batchsize, loss = Flux.logitcrossentropy,
-        savepath = joinpath(savepath, "logs", replace(classifier_filename(config, rep), ".bson" => ""))
-    )
-    prune_training_log(joinpath(savepath, "logs", replace(classifier_filename(config, rep), ".bson" => "")))
-    a, b, gamma_sd = config.a, config.b, config.gamma_sd
-    BSON.@save joinpath(savepath, classifier_filename(config, rep)) estimator a b gamma_sd
+    width = config.classifier.width
+    estimator = PointEstimator(Chain(mlp_trunk(n_inputs(config), width, config.n_hidden)..., Dense(width, M)))
+    log_path = joinpath(savepath, "logs", replace(classifier_filename(config, rep), ".bson" => ""))
+    estimator = train(estimator, sampler, simulator; training_options(config.classifier, estimator)..., loss = Flux.logitcrossentropy, savepath = log_path)
+    prune_training_log(log_path)
+    a, b, beta_mean, beta_sd, gamma_sd = config.a, config.b, config.beta_mean, config.beta_sd, config.gamma_sd
+    BSON.@save joinpath(savepath, classifier_filename(config, rep)) estimator a b beta_mean beta_sd gamma_sd
     return estimator
 end
 
-function train_cnpe(config, rep; savepath = model_selection_models_path, epochs = 200, stopping_epochs = 10, batchsize = 32, seed = 1000 * rep + config.K + 500)
+function train_cnpe(config, rep; savepath = models_path(config), seed = 1000 * rep + config.K + 500)
     Random.seed!(seed)
     model_prior = BetaBinomialModelPrior(config.a, config.b)
-    priors = coefficient_priors(config.gamma_sd)
+    priors = coefficient_priors(config)
     J = binomial(config.K, 2)
     n_pars = 1 + config.K + J
     sampler(n) = (s = sample_structures(n, config.K, model_prior, priors); CNPEParams(s[2], s[1]))
     simulator(p, _) = cnpe_input(simulate_structures(p.θ, p.masks, config), p.masks)
     network = Chain(mlp_trunk(n_inputs(config) + J, config.width, config.n_hidden)..., Dense(config.width, config.encoding_dim))
-    estimator = train(
-        PosteriorEstimator(NormalisingFlow(n_pars, config.encoding_dim), network), sampler, simulator;
-        K = config.train_size, m = 1, epochs, stopping_epochs, batchsize,
-        savepath = joinpath(savepath, "logs", replace(cnpe_filename(config, rep), ".bson" => ""))
-    )
-    prune_training_log(joinpath(savepath, "logs", replace(cnpe_filename(config, rep), ".bson" => "")))
-    gamma_sd = config.gamma_sd
-    BSON.@save joinpath(savepath, cnpe_filename(config, rep)) estimator gamma_sd
+    estimator = PosteriorEstimator(NormalisingFlow(n_pars, config.encoding_dim), network)
+    log_path = joinpath(savepath, "logs", replace(cnpe_filename(config, rep), ".bson" => ""))
+    estimator = train(estimator, sampler, simulator; training_options(config.cnpe, estimator)..., savepath = log_path)
+    prune_training_log(log_path)
+    beta_mean, beta_sd, gamma_sd = config.beta_mean, config.beta_sd, config.gamma_sd
+    BSON.@save joinpath(savepath, cnpe_filename(config, rep)) estimator beta_mean beta_sd gamma_sd
     return estimator
 end
 
-function load_model_selection_estimator(filename, path = model_selection_models_path)
+function load_model_selection_estimator(filename, path)
     file = joinpath(path, filename)
     isfile(file) || error("Model file $filename not found in $path.")
     return BSON.load(file)[:estimator]
 end
-load_classifier(config, rep; path = model_selection_models_path) = load_model_selection_estimator(classifier_filename(config, rep), path)
-load_cnpe(config, rep; path = model_selection_models_path) = load_model_selection_estimator(cnpe_filename(config, rep), path)
-
-## Frozen base architecture per system from architecture_selection.jl, completed into a training config
-function model_selection_config(system; selected_path = joinpath("output", "architecture_selection", "selected.csv"), train_size = 100_000, a = 1, b = 1, gamma_sd = 4, encoding_dim = 128)
-    selected = CSV.read(selected_path, DataFrame)
-    row = only(eachrow(filter(r -> r.n_lists == system.K && r.censoring_lower == system.censoring_lower && r.censoring_upper == system.censoring_upper, selected)))
-    return (; system..., width = row.width, n_hidden = row.n_hidden, encoding_dim, train_size, a, b, gamma_sd)
-end
+## rep = 0 is the ensemble of replicates 1-3
+const ensemble_replicates = 1:3
+load_classifier(config, rep) = rep == 0 ? [load_classifier(config, r) for r in ensemble_replicates] : load_model_selection_estimator(classifier_filename(config, rep), models_path(config))
+load_cnpe(config, rep) = rep == 0 ? [load_cnpe(config, r) for r in ensemble_replicates] : load_model_selection_estimator(cnpe_filename(config, rep), models_path(config))
 
 ## ---- Inference ----
 
@@ -215,6 +262,9 @@ function model_probabilities(classifier, y::AbstractMatrix)
     return π ./ sum(π, dims = 1)
 end
 model_probabilities(classifier, y::AbstractVector) = vec(model_probabilities(classifier, reshape(y, :, 1)))
+## Ensemble: the average of the replicates' probabilities
+model_probabilities(classifiers::AbstractVector{<:PointEstimator}, y::AbstractMatrix) = sum(model_probabilities(c, y) for c in classifiers) ./ length(classifiers)
+model_probabilities(classifiers::AbstractVector{<:PointEstimator}, y::AbstractVector) = vec(model_probabilities(classifiers, reshape(y, :, 1)))
 
 ## Smallest set of structures whose probabilities reach `level`
 function credible_model_set(π, level)
@@ -239,17 +289,27 @@ function model_summaries(π, K; top = 20)
     )
 end
 
-## B draws from an NPE restricted to the intercept support, sampling until enough are accepted
+## Unrestricted draws from an NPE, or from an equal-weight mixture of replicate NPEs (an ensemble)
+raw_draws(estimator, input, n) = sampleposterior(estimator, input, n)
+function raw_draws(estimators::AbstractVector, input, n)
+    k = rand(Multinomial(n, length(estimators)))
+    return reduce(hcat, [sampleposterior(e, input, m) for (e, m) in zip(estimators, k) if m > 0])
+end
+
+in_support(θ, lower, upper) = θ[:, lower .<= θ[1, :] .<= upper]
+
+## Up to B draws restricted to the intercept support, sampling until enough are accepted.
+## Returns fewer (possibly none) when the approximation puts almost no mass inside the support.
 function bounded_draws(estimator, input, B; lower = 1.0, upper = 10.0, max_rounds = 20)
     draws = Matrix{Float32}[]
-    have, rounds = 0, 0
-    while have < B && rounds < max_rounds
-        θ = boundedsampleposterior(estimator, input, max(2 * (B - have), 100), lower, upper)
+    have = 0
+    for _ in 1:max_rounds
+        have >= B && break
+        θ = in_support(raw_draws(estimator, input, max(2 * (B - have), 100)), lower, upper)
         push!(draws, θ)
         have += size(θ, 2)
-        rounds += 1
     end
-    have < B && @warn "Only $have of $B posterior draws fell inside the intercept support."
+    have < B && @warn "Only $have of $B posterior draws fell inside the intercept support." maxlog = 20
     θ = reduce(hcat, draws)
     return θ[:, 1:min(B, size(θ, 2))]
 end
@@ -285,31 +345,52 @@ function population_draws(θ_eff, counts_obs; censoring_lower = 0, censoring_upp
     return (alpha = Float64.(θ_eff[1, :]), lambda0 = exp.(Float64.(θ_eff[1, :])), N0 = N0, N_obs = N_obs, N = N_obs .+ N0)
 end
 
-## Model-averaged posterior: models drawn exactly from π, then parameters from the conditional NPE
-function sample_model_averaged_posterior(cnpe, y, π, B, system; counts_obs, rng = Random.default_rng())
+effective_draws(θ, models, K) = isempty(models) ? θ : reduce(hcat, [effective_parameters(t, model_mask(c, K)) for (t, c) in zip(eachcol(θ), models)])
+
+## Model-averaged posterior from q(m | y) q(θ | y, m), restricted jointly to the intercept support:
+## draw structures from π and parameters from the conditional NPE, keep the draws inside the support,
+## and repeat until B are kept. A structure's weight is therefore π(m) times its acceptance rate, which
+## is the truncated joint approximation; a structure with no mass inside the support drops out.
+function sample_model_averaged_posterior(cnpe, y, π, B, system; counts_obs, lower = 1.0, upper = 10.0, max_rounds = 20, rng = Random.default_rng())
     K = system.K
-    n_per_model = rand(rng, Multinomial(B, π ./ sum(π)))
+    π = π ./ sum(π)
     models, θs = Int[], Matrix{Float32}[]
-    for c in findall(>(0), n_per_model)
-        push!(θs, conditional_posterior(cnpe, y, model_mask(c, K), n_per_model[c]))
-        append!(models, fill(c, size(θs[end], 2)))
+    have, requested, n_request = 0, 0, B
+    for _ in 1:max_rounds
+        have >= B && break
+        for (c, n) in enumerate(rand(rng, Multinomial(n_request, π)))
+            n == 0 && continue
+            θ = in_support(raw_draws(cnpe, reshape(cnpe_input(y, model_mask(c, K)), :, 1), n), lower, upper)
+            requested += n
+            size(θ, 2) == 0 && continue
+            push!(θs, θ)
+            append!(models, fill(c, size(θ, 2)))
+            have += size(θ, 2)
+        end
+        acceptance = max(have / requested, 0.01)
+        n_request = min(ceil(Int, 1.2 * (B - have) / acceptance), 20 * B)
     end
-    θ = reduce(hcat, θs)
-    θ_eff = reduce(hcat, [effective_parameters(t, model_mask(c, K)) for (t, c) in zip(eachcol(θ), models)])
+    have < B && @warn "Only $have of $B model-averaged draws fell inside the intercept support." maxlog = 20
+    θ = isempty(θs) ? zeros(Float32, 1 + K + binomial(K, 2), 0) : reduce(hcat, θs)
+    keep = have > B ? sort(randperm(rng, have)[1:B]) : (1:have)
+    θ, models = θ[:, keep], models[keep]
+    θ_eff = effective_draws(θ, models, K)
     pop = population_draws(θ_eff, counts_obs; system.censoring_lower, system.censoring_upper, rng)
     return (; models, θ, θ_eff, pop...)
 end
 
 function sample_conditional_population(cnpe, y, mask, B, system; counts_obs, rng = Random.default_rng())
     θ = conditional_posterior(cnpe, y, mask, B)
-    θ_eff = reduce(hcat, [effective_parameters(t, mask) for t in eachcol(θ)])
+    models = fill(model_index(mask), size(θ, 2))
+    θ_eff = effective_draws(θ, models, system.K)
     pop = population_draws(θ_eff, counts_obs; system.censoring_lower, system.censoring_upper, rng)
-    return (; models = fill(model_index(mask), size(θ, 2)), θ, θ_eff, pop...)
+    return (; models, θ, θ_eff, pop...)
 end
 
 ## Law of total variance over groups: weights default to the empirical group frequencies,
 ## in which case within + between equals the (uncorrected) total variance exactly
 function variance_decomposition(values, groups; weights = nothing)
+    isempty(values) && return (within = NaN, between = NaN, total = NaN, between_share = NaN)
     ids = unique(groups)
     w = isnothing(weights) ? [mean(groups .== g) for g in ids] : [weights[g] for g in ids]
     w = w ./ sum(w)
@@ -356,13 +437,16 @@ function interval_score(lo, hi, truth, level)
     return (hi - lo) + (2 / a) * (lo - truth) * (truth < lo) + (2 / a) * (truth - hi) * (truth > hi)
 end
 
+## With no draws (no posterior mass inside the intercept support) every metric is NaN, so the row is kept and flagged
 function posterior_metrics(draws, truth; levels = coverage_levels, rng = Random.default_rng())
+    isempty(draws) && return merge(map(_ -> NaN, posterior_metrics([0.0, 1.0], truth; levels)), (truth = Float64(truth), n_draws = 0))
     draws = Float64.(draws)
     med = median(draws)
     row = (
         truth = Float64(truth), mean = mean(draws), median = med, sd = std(draws),
         error = med - truth, abs_error = abs(med - truth), ape = truth == 0 ? NaN : abs(med - truth) / abs(truth),
         rank = randomised_rank(draws, truth; rng),
+        n_draws = length(draws),
     )
     ints = map(levels) do L
         lo, hi = quantile(draws, [(1 - L) / 2, (1 + L) / 2])

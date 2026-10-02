@@ -1,6 +1,7 @@
 ## Reference posterior model probabilities for a stratified subset of the model-selection test sets:
 ## all 2^J structures enumerated, each marginal likelihood by importance sampling (Laplace-t proposal).
 ## The first n_check datasets also repeat the top structures with a second proposal.
+## The run (priors) comes from MS_RUN; see model_selection_runs.
 using Pkg; Pkg.activate(".")
 using Distributed, SlurmClusterManager
 addprocs(SlurmManager(); exeflags=["--threads", "1", "--project"])
@@ -11,14 +12,14 @@ addprocs(SlurmManager(); exeflags=["--threads", "1", "--project"])
 @everywhere include("model_selection_reference.jl")
 @everywhere BLAS.set_num_threads(1)
 
-gamma_sd = 4
+run = model_selection_run()
 n_reference = Dict("A" => 200, "B" => 300)
 n_check = 20
 n_check_models = 5
 n_draws = 50_000
 B = 4000
 
-output_path = joinpath("output", "model_selection")
+output_path = model_selection_output_path(run)
 reference_path = joinpath(output_path, "reference")
 mkpath(reference_path)
 
@@ -32,16 +33,16 @@ function reference_subset(test, system, n)
     return stratified_sample(collect(zip(size_band, intercept_band, censored_band)), n; seed = 3)
 end
 
-@everywhere function run_reference_dataset(system, i, counts_obs, truth, check, n_check_models, gamma_sd, n_draws, B, reference_path)
+@everywhere function run_reference_dataset(system, i, counts_obs, truth, check, n_check_models, priors, n_draws, B, reference_path)
     prefix = joinpath(reference_path, "$(system.system)_dataset$(i)")
     isfile("$(prefix)_posteriors.csv") && return
     Random.seed!(i)
     K = system.K
-    elapsed = @elapsed ref = reference_model_average(counts_obs, system; gamma_sd, n_draws, B)
+    elapsed = @elapsed ref = reference_model_average(counts_obs, system; priors, n_draws, B)
     if check
         rm("$(prefix)_check.csv"; force = true)  # an interrupted earlier run may have left partial rows
         for c in sortperm(ref.π, rev = true)[1:n_check_models]
-            r = log_evidence_check(counts_obs, model_mask(c, K); system.censoring_lower, system.censoring_upper, gamma_sd, n_draws)
+            r = log_evidence_check(counts_obs, model_mask(c, K); system.censoring_lower, system.censoring_upper, priors, n_draws)
             CSV.write("$(prefix)_check.csv", DataFrame([merge((dataset = i, system = system.system, model = c), r)]); append = isfile("$(prefix)_check.csv"))
         end
     end
@@ -66,16 +67,16 @@ end
 tasks = []
 for s in ["A", "B"]
     system = model_selection_systems[s]
-    test = (; (k => v for (k, v) in BSON.load(joinpath(output_path, "test_data_$(s).bson")))...)
+    test = (; (k => v for (k, v) in BSON.load(model_selection_test_file(run, system)))...)
     subset = reference_subset(test, system, n_reference[s])
     CSV.write(joinpath(output_path, "reference_datasets_$(s).csv"), DataFrame(dataset = subset))
     for (j, i) in enumerate(subset)
         truth = (alpha = Float64(test.pars[1, i]), lambda0 = exp(Float64(test.pars[1, i])), N0 = test.N0[i], N = test.N[i])
         isfile(joinpath(reference_path, "$(s)_dataset$(i)_posteriors.csv")) ||
-            push!(tasks, (system, i, test.counts_obs[:, i], truth, j <= n_check, n_check_models, gamma_sd, n_draws, B, reference_path))
+            push!(tasks, (system, i, test.counts_obs[:, i], truth, j <= n_check, n_check_models, coefficient_priors(run), n_draws, B, reference_path))
     end
 end
-println("Reference datasets to fit: ", length(tasks))
+println("Run $(run.run): reference datasets to fit: ", length(tasks))
 
 ## A failing dataset is logged and skipped rather than stopping every worker; rerunning retries it
 pmap(tasks) do t

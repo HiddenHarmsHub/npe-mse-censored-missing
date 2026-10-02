@@ -6,11 +6,11 @@
 ## The data-only constants dropped by likelihood_censored are the same for every structure, so
 ## they cancel in the posterior model probabilities. Returns resampled draws on the full
 ## (effective) parameter vector, with zeros for inactive interactions.
-function log_evidence(counts, mask; censoring_lower = 0, censoring_upper = 0, gamma_sd = 4, n_draws = 50_000, n_keep = 500, ν = 4, scale = 1.5, pilot_draws = nothing, rng = Random.default_rng())
+function log_evidence(counts, mask; censoring_lower = 0, censoring_upper = 0, priors = coefficient_priors(), n_draws = 50_000, n_keep = 500, ν = 4, scale = 1.5, pilot_draws = nothing, rng = Random.default_rng())
     K = Int(log2(length(counts) + 1))
     active = vcat(trues(1 + K), mask)
     Xm = one_hot_encode_parameters(K)[:, active]
-    is = importance_reference(counts, Xm; censoring_lower, censoring_upper, coefficient_priors(gamma_sd)..., n_draws, ν, scale, pilot_draws, K, rng)
+    is = importance_reference(counts, Xm; censoring_lower, censoring_upper, priors..., n_draws, ν, scale, pilot_draws, K, rng)
     keep = rand(rng, Categorical(is.weights), n_keep)
     θ = zeros(Float32, length(active), n_keep)
     θ[active, :] = is.draws[:, keep]
@@ -30,8 +30,8 @@ function log_evidence_check(counts, mask; kwargs...)
 end
 
 ## Marginal likelihoods of all 2^J structures; reused for every model prior
-reference_evidences(counts, system; gamma_sd = 4, n_draws = 50_000, n_keep = 500, rng = Random.default_rng()) =
-    [log_evidence(counts, model_mask(c, system.K); system.censoring_lower, system.censoring_upper, gamma_sd, n_draws, n_keep, rng) for c in 1:n_models(system.K)]
+reference_evidences(counts, system; priors = coefficient_priors(), n_draws = 50_000, n_keep = 500, rng = Random.default_rng()) =
+    [log_evidence(counts, model_mask(c, system.K); system.censoring_lower, system.censoring_upper, priors, n_draws, n_keep, rng) for c in 1:n_models(system.K)]
 
 ## Reference Bayesian model average under `model_prior`, from the enumerated evidences
 function reference_mixture(fits, counts, system; model_prior = primary_model_prior, B = 4000, rng = Random.default_rng())
@@ -51,7 +51,7 @@ function reference_mixture(fits, counts, system; model_prior = primary_model_pri
 end
 
 ## Reference Bayesian model averaging over all 2^J structures
-function reference_model_average(counts, system; model_prior = primary_model_prior, gamma_sd = 4, n_draws = 50_000, n_keep = 500, B = 4000, rng = Random.default_rng())
-    fits = reference_evidences(counts, system; gamma_sd, n_draws, n_keep, rng)
+function reference_model_average(counts, system; model_prior = primary_model_prior, priors = coefficient_priors(), n_draws = 50_000, n_keep = 500, B = 4000, rng = Random.default_rng())
+    fits = reference_evidences(counts, system; priors, n_draws, n_keep, rng)
     return reference_mixture(fits, counts, system; model_prior, B, rng)
 end

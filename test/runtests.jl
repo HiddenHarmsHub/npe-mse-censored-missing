@@ -180,8 +180,12 @@ end
     @test sim.N == vec(sum(sim.counts, dims = 1)) .+ sim.N0
 end
 
+## Stub conditional NPEs for system B: the posterior ignores the data. StubNPE puts every draw inside the
+## intercept support; OutsideNPE puts the null structure's draws outside it (its mask is the input's tail).
 struct StubNPE end
-boundedsampleposterior(::StubNPE, Z, N::Integer, lower, upper; kw...) = vcat(fill(5f0, 1, N), randn(Float32, 10, N))
+NeuralEstimators.sampleposterior(::StubNPE, Z, N::Integer; kw...) = vcat(fill(5f0, 1, N), randn(Float32, 10, N))
+struct OutsideNPE end
+NeuralEstimators.sampleposterior(::OutsideNPE, Z, N::Integer; kw...) = vcat(fill(any(Z[end-5:end, 1] .> 0) ? 5f0 : 0.5f0, 1, N), randn(Float32, 10, N))
 
 @testset "population draws and model averaging" begin
     rng = MersenneTwister(6)
@@ -210,6 +214,63 @@ boundedsampleposterior(::StubNPE, Z, N::Integer, lower, upper; kw...) = vcat(fil
     groups = repeat([1, 2, 3], 1000)
     d = variance_decomposition(values, groups)
     @test d.total ≈ var(values; corrected = false)
+end
+
+@testset "intercept truncation and ensembles" begin
+    rng = MersenneTwister(9)
+    system = model_selection_systems["B"]
+    counts_obs = [74, 17, -1, 584, 63, 12, 9, 35, -1, -1, -1, 35, 17, -1, -1]
+    y = encode_counts(counts_obs; censored = true)
+    ## Joint truncation: the null structure (class 1) has no draws inside the support, so it drops out
+    π = fill(1 / 64, 64)
+    bma = sample_model_averaged_posterior(OutsideNPE(), y, π, 2000, system; counts_obs, rng)
+    @test length(bma.models) == 2000 && size(bma.θ, 2) == 2000
+    @test !any(bma.models .== 1)
+    @test all(1 .<= bma.alpha .<= 10)
+    ## A structure with nothing inside the support returns no draws instead of failing
+    empty = sample_conditional_population(OutsideNPE(), y, falses(6), 100, system; counts_obs)
+    @test isempty(empty.N0) && size(empty.θ_eff, 2) == 0
+    m = posterior_metrics(empty.N0, 10.0)
+    @test m.n_draws == 0 && isnan(m.median) && m.truth == 10.0
+    @test isnan(variance_decomposition(Float64[], Int[]).total)
+    pi_null = zeros(64); pi_null[1] = 1
+    @test isempty(sample_model_averaged_posterior(OutsideNPE(), y, pi_null, 100, system; counts_obs, rng).models)
+
+    ## Ensembles: draws are split across members; probabilities are the members' average
+    @test size(raw_draws([StubNPE(), StubNPE(), StubNPE()], y, 1000), 2) == 1000
+    classifiers = [PointEstimator(Chain(Dense(30, 8, relu), Dense(8, 64))) for _ in 1:3]
+    Y = randn(Float32, 30, 5)
+    @test model_probabilities(classifiers, Y) ≈ sum(model_probabilities(c, Y) for c in classifiers) ./ 3
+    @test sum(model_probabilities(classifiers, Y[:, 1])) ≈ 1
+end
+
+@testset "run configurations" begin
+    selected = joinpath(mktempdir(), "selected.csv")
+    CSV.write(selected, DataFrame(n_lists = [5, 4], width = [128, 64], n_hidden = [1, 2], censoring_lower = [0, 1], censoring_upper = [0, 4]))
+    ## The original run keeps the original file names and folders
+    a = model_selection_config(model_selection_systems["A"], model_selection_runs["b4_g4"]; selected_path = selected)
+    @test classifier_filename(a, 1) == "classifier_5_128_1_100000_0_0_1_1_4_1.bson"
+    @test cnpe_filename(a, 2) == "cnpe_5_128_1_128_100000_0_0_4_2.bson"
+    @test models_path(a) == joinpath("output", "models_model_selection")
+    @test model_selection_output_path(model_selection_runs["b4_g4"]) == joinpath("output", "model_selection")
+    ## The N(0, 1) run: wider 5-list classifier only, its own folders, and its priors in simulation
+    a1 = model_selection_config(model_selection_systems["A"], model_selection_runs["b1_g1"]; selected_path = selected)
+    b1 = model_selection_config(model_selection_systems["B"], model_selection_runs["b1_g1"]; selected_path = selected)
+    @test classifier_filename(a1, 1) == "classifier_5_256_1_100000_0_0_1_1_1_1.bson"
+    @test b1.classifier.width == 64 && a1.width == 128
+    @test models_path(a1) == joinpath("output", "models_model_selection_b1_g1")
+    @test coefficient_priors(model_selection_runs["b1_g1"]).beta_dist == Normal(0, 1)
+    ## The retrained original priors: original priors (so the fixed-model NPE is compared), new settings, own folders
+    r = model_selection_runs["b4_g4r"]
+    @test original_priors(r) && r.cnpe == model_selection_runs["b1_g1"].cnpe
+    @test model_selection_output_path(r) == joinpath("output", "model_selection_b4_g4r")
+    @test allunique([run.label for run in values(model_selection_runs)])
+    ## Training options: clipping chains Adam after ClipNorm and NeuralEstimators can read its learning rate
+    est = PointEstimator(Chain(Dense(3, 4), Dense(4, 2)))
+    opts = training_options(a1.cnpe, est)
+    @test NeuralEstimators.findlr(opts.optimiser) ≈ 2e-4
+    @test opts.K_val == 50_000 && opts.stopping_epochs == 50
+    @test !haskey(training_options(a.cnpe, est), :K_val)
 end
 
 @testset "metrics" begin
