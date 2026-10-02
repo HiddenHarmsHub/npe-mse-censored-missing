@@ -10,9 +10,8 @@ addprocs(SlurmManager(); exeflags=["--threads", "1", "--project"])
 
 train_size = 100_000
 gamma_sd = 4
-test_size = 10_000
 ## Replicate 1 is evaluated on the full test set; the others on its first 2,000 datasets, for training variability
-n_evaluate = Dict(1 => test_size, 2 => 2000, 3 => 2000)
+n_evaluate = Dict(1 => 10_000, 2 => 2000, 3 => 2000)
 chunk_size = 100
 n_draws = 4000
 
@@ -21,14 +20,10 @@ output_path = joinpath("output", "model_selection")
 mkpath(results_path)
 selected = CSV.read(joinpath("output", "architecture_selection", "selected.csv"), DataFrame)
 
+## Test sets come from model_selection_test_data.jl
 test_file(system) = joinpath(output_path, "test_data_$(system.system).bson")
-for (system, seed) in [(model_selection_systems["A"], 43), (model_selection_systems["B"], 44)]
-    isfile(test_file(system)) && continue
-    Random.seed!(seed)
-    test = simulate_model_selection_data(test_size, system; gamma_sd)
-    masks, pars, counts, counts_obs, y, N0, N = Matrix(test.masks), test.pars, test.counts, test.counts_obs, test.y, test.N0, test.N
-    BSON.@save test_file(system) masks pars counts counts_obs y N0 N
-    println("Generated test data for system $(system.system)")
+for system in values(model_selection_systems)
+    isfile(test_file(system)) || error("$(test_file(system)) not found; run src/model_selection_test_data.jl first.")
 end
 
 @everywhere chunk_file(config, rep, chunk, kind) = joinpath(results_path, "$(config.system)_rep$(rep)_chunk$(chunk)_$(kind).csv")
