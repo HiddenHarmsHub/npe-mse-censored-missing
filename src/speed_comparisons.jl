@@ -70,6 +70,8 @@ end
     npe_models_path = joinpath("output", "models_npe")
     test_data_path = joinpath("output", "test_data")
     test_data, test_pars = load_test_data(test_data_path, n_lists, 0, 10)
+    test_counts, _ = load_test_counts(test_data_path, n_lists, 0, 10)
+    X = one_hot_encode_parameters(n_lists)
 
     speed_comparison_path = joinpath("output", "speed_comparisons")
     mkpath(speed_comparison_path)
@@ -132,7 +134,7 @@ end
 
     for (i, num_iterations) in enumerate(iterations_list)
         println("Benchmarking MCMC with $num_iterations iterations...")
-        run_mcmc(slice_idx) = run_mcmc_test_slice(slice_idx, n_lists, test_data, test_pars, num_chains = 4, samples_path = nothing, summary_path = nothing, n_iterations = num_iterations)
+        run_mcmc(slice_idx) = fit_nuts(test_counts[:, slice_idx], X, censoring_lower = 0, censoring_upper = 10, n_samples = num_iterations, n_chains = 4)
         
         i == 1 && time_function(run_mcmc, slice_idx) ## warmup
 
