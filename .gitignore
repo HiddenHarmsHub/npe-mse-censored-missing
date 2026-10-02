@@ -14,3 +14,9 @@ output/speed_comparisons/
 output/intercept_estimate_comparison.csv
 paper_submission/
 docs/
+output/mcmc_diagnostics/
+output/irls_samples/
+output/irls_summary/
+output/irls_diagnostics/
+output/is_summary/
+output/reference_validation/comparison/
