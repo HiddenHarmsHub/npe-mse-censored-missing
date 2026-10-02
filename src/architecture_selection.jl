@@ -67,7 +67,7 @@ end
         calibration_deviation = mean(abs.(coverage .- levels')),
         max_calibration_deviation = maximum(abs.(coverage .- levels')),
         seconds_per_dataset = elapsed / length(keep),
-        n_weights = sum(length, Flux.params(estimator))
+        n_weights = sum(length, Flux.trainables(estimator))
     ))
 end
 
