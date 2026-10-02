@@ -1,4 +1,4 @@
-using Distributions, Flux, BSON, DataFrames, CSV, Combinatorics, Folds
+using Distributions, Flux, BSON, DataFrames, CSV, Combinatorics, Folds, Random
 
 import NeuralEstimators: sampleposterior
 using NeuralEstimators
@@ -216,6 +216,46 @@ function load_test_data(test_path, list_size, censoring_lower = 0, censoring_upp
         return Float32.(vcat(U, W)), test_data[:params]
     end
     return test_data[:Z_test], test_data[:params]
+end
+
+## Integer counts for the MCMC samplers, with -1 marking censored cells
+function load_test_counts(test_path, list_size, censoring_lower = 0, censoring_upper = 0)
+    test_data = BSON.load(joinpath(test_path, "test_data_$list_size.bson"))
+    haskey(test_data, :Z_counts) || error("test_data_$list_size.bson has no raw counts; regenerate it with simulation_study.jl.")
+    Z = test_data[:Z_counts]
+    if censoring_upper > 0
+        Z = ifelse.(censoring_lower .<= Z .<= censoring_upper, -1, Z)
+    end
+    return Z, test_data[:params]
+end
+
+## True if any cell's log-rate exceeds the cap used by rpois, i.e. the data are not exact draws from the model
+function is_capped(pars; logλ_max = 43.0)
+    K = Int(-0.5 + (sqrt(8 * length(pars) - 7) / 2))
+    return maximum(one_hot_encode_parameters(K) * pars) > logλ_max
+end
+
+## Proportional stratified sample by intercept band and number of censored cells,
+## so the subset remains a sample from the prior predictive
+function select_benchmark_datasets(test_pars, test_counts; n = 1000, n_bands = 5, intercept_support = (1.0, 10.0), seed = 1)
+    rng = Random.MersenneTwister(seed)
+    N = size(test_pars, 2)
+    width = (intercept_support[2] - intercept_support[1]) / n_bands
+    band = clamp.(floor.(Int, (test_pars[1, :] .- intercept_support[1]) ./ width), 0, n_bands - 1)
+    n_censored = vec(sum(test_counts .== -1, dims = 1))
+    censored_group = searchsortedfirst.(Ref(quantile(n_censored, [1/3, 2/3])), n_censored)
+    strata = collect(zip(band, censored_group))
+
+    groups = Dict(s => findall(==(s), strata) for s in unique(strata))
+    keys_sorted = sort(collect(keys(groups)))
+    exact = [n * length(groups[s]) / N for s in keys_sorted]
+    alloc = floor.(Int, exact)
+    for i in sortperm(exact .- alloc, rev = true)[1:(n - sum(alloc))]
+        alloc[i] += 1
+    end
+
+    selected = vcat([shuffle(rng, groups[s])[1:a] for (s, a) in zip(keys_sorted, alloc)]...)
+    return sort(selected)
 end
 
 function get_param_names(n_lists)
