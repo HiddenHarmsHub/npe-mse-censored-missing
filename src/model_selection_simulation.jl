@@ -54,7 +54,13 @@ println("Chunks to evaluate: ", length(tasks))
 
 pmap(tasks) do task
     println("Worker $(myid()) evaluating system $(task[1].system), replicate $(task[2]), chunk $(task[3])")
-    run_simulation_chunk(task...)
+    try
+        run_simulation_chunk(task...)
+    catch e
+        msg = sprint(showerror, e, catch_backtrace())
+        println("Chunk failed for system $(task[1].system), replicate $(task[2]), chunk $(task[3]):\n$msg")
+        write(chunk_file(task[1], task[2], task[3], "error") * ".txt", msg)
+    end
 end
 
 println("Finished the model-selection simulation study.")

@@ -77,6 +77,17 @@ for s in ["A", "B"]
 end
 println("Reference datasets to fit: ", length(tasks))
 
-pmap(t -> run_reference_dataset(t...), tasks)
+## A failing dataset is logged and skipped rather than stopping every worker; rerunning retries it
+pmap(tasks) do t
+    try
+        run_reference_dataset(t...)
+    catch e
+        msg = sprint(showerror, e, catch_backtrace())
+        println("Reference fit failed for system $(t[1].system), dataset $(t[2]):\n$msg")
+        write(joinpath(t[end], "$(t[1].system)_dataset$(t[2])_error.txt"), msg)
+    end
+end
+n_failed = count(f -> endswith(f, "_error.txt"), readdir(reference_path))
+n_failed > 0 && println("$n_failed datasets failed; see $(reference_path)/*_error.txt")
 
 println("Finished the reference model-averaging study.")

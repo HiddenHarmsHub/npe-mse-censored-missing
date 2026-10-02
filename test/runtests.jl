@@ -242,4 +242,13 @@ end
     @test all(ev.θ[5:7, :] .== 0)
     check = log_evidence_check(y, Bool[1, 0, 1]; n_draws = 20_000)
     @test abs(check.laplace - check.pilot) < 0.05
+
+    ## A badly fitting structure for large counts pushes the mode to the intercept's lower bound,
+    ## where the logit-scale search used to produce NaN derivatives (test set A, dataset 8060)
+    y5 = [6598, 86541, 398, 22178, 1906391, 142, 160, 826365, 302974, 17493, 883781, 14776413, 0, 2412272, 250375, 16,
+          89925, 6417, 0, 300897, 2519155, 7, 107888568, 9917693, 5, 0, 37014, 275683, 44, 1381, 26]
+    X5 = one_hot_encode_parameters(5)[:, vcat(trues(6), model_mask(41, 5))]
+    mode5, L5 = laplace_approximation(y5, X5; K = 5)
+    @test all(isfinite, mode5) && all(isfinite, L5)
+    @test isfinite(log_evidence(y5, model_mask(41, 5); n_draws = 2000).log_evidence)
 end

@@ -115,14 +115,20 @@ end
 function laplace_approximation(counts, X; censoring_lower = 0, censoring_upper = 0, intercept_dist = Uniform(1, 10), beta_dist = Normal(0, 4), gamma_dist = Normal(0, 4), max_iter = 200, min_precision = 1e-2, K = nothing)
     priors = (intercept_dist = intercept_dist, beta_dist = beta_dist, gamma_dist = gamma_dist)
     f(θ) = log_posterior(θ, counts, X, censoring_lower, censoring_upper; priors..., K)
-    function precision_factor(h, θ)
-        E = eigen(Symmetric(-ForwardDiff.hessian(h, θ)))
+    function precision_factor(H)
+        E = eigen(Symmetric(-H))
         return E.vectors, max.(E.values, min_precision)
     end
+    precision_factor(h, θ) = precision_factor(ForwardDiff.hessian(h, θ))
     function newton(h, x, n_iter)
         for _ in 1:n_iter
-            V, λ = precision_factor(h, x)
+            H = ForwardDiff.hessian(h, x)
             g = ForwardDiff.gradient(h, x)
+            ## Stop at the last finite iterate. When a badly fitting structure pushes the mode to the
+            ## intercept's lower bound, the logit-scale intercept runs off to -Inf, where the logistic
+            ## has NaN derivatives although the log posterior itself stays finite.
+            (all(isfinite, H) && all(isfinite, g)) || break
+            V, λ = precision_factor(H)
             step = V * ((V' * g) ./ λ)
             dot(g, step) < 1e-10 && break  # Newton decrement
             h0, t = h(x), 1.0
