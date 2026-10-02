@@ -6,6 +6,8 @@ addprocs(SlurmManager(); exeflags=["--threads", "1", "--project"])
 
 @everywhere include("mse_functions.jl")
 @everywhere include("mcmc_functions.jl")
+@everywhere using Logging
+@everywhere disable_logging(Logging.Info)  # Turing logs every initial step size
 
 
 test_path = joinpath("output", "test_data")
@@ -49,18 +51,23 @@ if !overwrite_files
 end
 
 
+## A failing dataset is reported and left for the next run, which skips completed datasets
 pmap(
     slice_idx ->  begin
         wid = myid()
         println("Worker $wid running ")
-        run_mcmc_test_slice(
-            slice_idx,
-            test_counts,
-            test_pars;
-            censoring_lower = censoring_lower,
-            censoring_upper = censoring_upper,
-            paths = paths
-        )
+        try
+            run_mcmc_test_slice(
+                slice_idx,
+                test_counts,
+                test_pars;
+                censoring_lower = censoring_lower,
+                censoring_upper = censoring_upper,
+                paths = paths
+            )
+        catch e
+            println("Dataset $slice_idx failed: ", sprint(showerror, e))
+        end
     end,
     test_idx
 )

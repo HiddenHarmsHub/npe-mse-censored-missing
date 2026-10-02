@@ -109,6 +109,8 @@ function weighted_quantile(x, w, p)
 end
 
 ## Importance sampling from a multivariate t. By default it is the Laplace approximation; when pilot draws (e.g. from another sampler) are given their mean and covariance are used.
+## The proposal is built in Laplace-whitened coordinates z, θ = mode + L z, because posterior scales can span
+## more than 1/eps (counts near the simulator cap), which makes a covariance in θ numerically singular.
 ## The weights use the exact posterior, so the proposal only affects efficiency.
 function importance_reference(
     counts,
@@ -128,19 +130,22 @@ function importance_reference(
 )
     priors = (intercept_dist = intercept_dist, beta_dist = beta_dist, gamma_dist = gamma_dist)
     logpost(θ) = log_posterior(θ, counts, X, censoring_lower, censoring_upper; priors..., K)
+    mode, L = laplace_approximation(counts, X; censoring_lower, censoring_upper, priors..., K)
+    n_pars = length(mode)
     if isnothing(pilot_draws)
-        μ, L = laplace_approximation(counts, X; censoring_lower, censoring_upper, priors..., K)
-        Σ = Symmetric(L * L')
+        μ, Σ = zeros(n_pars), Symmetric(Matrix(1.0I, n_pars, n_pars))
     else
-        μ = vec(mean(pilot_draws, dims = 1))
-        Σ = Symmetric(cov(pilot_draws))
+        Z = L \ (permutedims(pilot_draws) .- mode)
+        μ, Σ = vec(mean(Z, dims = 2)), Symmetric(cov(Z, dims = 2))
     end
     if !isposdef(Σ)
         Σ = Symmetric(Σ + (abs(eigmin(Σ)) + 1e-6) * I)
     end
     q = MvTDist(ν, μ, Matrix(scale^2 * Σ))
-    θs = rand(rng, q, n_draws)
-    logw = [logpost(θ) for θ in eachcol(θs)] .- logpdf(q, θs)
+    zs = rand(rng, q, n_draws)
+    θs = mode .+ L * zs
+    ## log|det L| is the Jacobian of z -> θ, needed for the evidence but constant across draws
+    logw = [logpost(θ) for θ in eachcol(θs)] .- logpdf(q, zs) .+ logabsdet(L)[1]
     max_logw = maximum(logw)
     w = exp.(logw .- max_logw)
     sum_w = sum(w)
@@ -152,7 +157,7 @@ function importance_reference(
     log_evidence_se = sqrt(max(1 / ess - 1 / n_draws, 0))
 
     means = θs * w
-    sds = sqrt.(max.((θs .^ 2) * w .- means .^ 2, 0))
+    sds = sqrt.(((θs .- means) .^ 2) * w)
     quantiles = [weighted_quantile(collect(row), w, p) for row in eachrow(θs), p in probs]
     return (means = means, sds = sds, quantiles = quantiles, probs = probs, ess = ess,
         log_evidence = log_evidence, log_evidence_se = log_evidence_se, draws = θs, weights = w)
