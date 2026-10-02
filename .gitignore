@@ -20,3 +20,9 @@ output/irls_summary/
 output/irls_diagnostics/
 output/is_summary/
 output/reference_validation/comparison/
+output/model_selection/simulation/
+output/model_selection/reference/
+output/model_selection/test_data_*.bson
+output/architecture_selection/validation_*.bson
+output/architecture_selection/metrics/
+output/models_model_selection/logs/

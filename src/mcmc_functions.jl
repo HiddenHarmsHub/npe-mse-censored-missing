@@ -87,8 +87,9 @@ end
 log_prior(pars, K, intercept_dist, beta_dist, gamma_dist) =
     logpdf(intercept_dist, pars[1]) + sum(logpdf.(beta_dist, pars[2:1+K])) + sum(logpdf.(gamma_dist, pars[2+K:end]))
 
-function log_posterior(pars, counts, X, censoring_lower, censoring_upper; intercept_dist = Uniform(1, 10), beta_dist = Normal(0, 4), gamma_dist = Normal(0, 4))
-    K = Int(-0.5 + (sqrt(8 * (length(pars) - 1) + 1) / 2))
+## K is inferred from a full parameter vector; pass it for a submodel whose X keeps only some interaction columns
+function log_posterior(pars, counts, X, censoring_lower, censoring_upper; intercept_dist = Uniform(1, 10), beta_dist = Normal(0, 4), gamma_dist = Normal(0, 4), K = nothing)
+    K = isnothing(K) ? Int(-0.5 + (sqrt(8 * (length(pars) - 1) + 1) / 2)) : K
     lp = log_prior(pars, K, intercept_dist, beta_dist, gamma_dist)
     isfinite(lp) || return lp
     return lp + likelihood_censored(counts, pars, X, censoring_lower, censoring_upper)
@@ -96,9 +97,9 @@ end
 
 ## Weighted ridge least squares on log counts, used as a deterministic starting point for Newton.
 ## Censored cells take the midpoint of the censoring interval and the prior acts as the ridge.
-function log_count_start(counts, X, censoring_lower, censoring_upper, intercept_dist, beta_dist, gamma_dist)
+function log_count_start(counts, X, censoring_lower, censoring_upper, intercept_dist, beta_dist, gamma_dist; K = nothing)
     n_pars = size(X, 2)
-    K = Int(-0.5 + (sqrt(8 * (n_pars - 1) + 1) / 2))
+    K = isnothing(K) ? Int(-0.5 + (sqrt(8 * (n_pars - 1) + 1) / 2)) : K
     ỹ = ifelse.(counts .== -1, (censoring_lower + censoring_upper) / 2, counts) .+ 0.5
     prior_mean = vcat(mean(intercept_dist), fill(mean(beta_dist), K), fill(mean(gamma_dist), n_pars - K - 1))
     prior_prec = 1 ./ vcat(var(intercept_dist), fill(var(beta_dist), K), fill(var(gamma_dist), n_pars - K - 1))
@@ -111,9 +112,9 @@ end
 
 ## Posterior mode by Newton's method, and the Laplace factor L with L L' = H⁻¹.
 ## Eigenvalues of the negative Hessian are floored so flat directions stay bounded.
-function laplace_approximation(counts, X; censoring_lower = 0, censoring_upper = 0, intercept_dist = Uniform(1, 10), beta_dist = Normal(0, 4), gamma_dist = Normal(0, 4), max_iter = 200, min_precision = 1e-2)
+function laplace_approximation(counts, X; censoring_lower = 0, censoring_upper = 0, intercept_dist = Uniform(1, 10), beta_dist = Normal(0, 4), gamma_dist = Normal(0, 4), max_iter = 200, min_precision = 1e-2, K = nothing)
     priors = (intercept_dist = intercept_dist, beta_dist = beta_dist, gamma_dist = gamma_dist)
-    f(θ) = log_posterior(θ, counts, X, censoring_lower, censoring_upper; priors...)
+    f(θ) = log_posterior(θ, counts, X, censoring_lower, censoring_upper; priors..., K)
     function precision_factor(h, θ)
         E = eigen(Symmetric(-ForwardDiff.hessian(h, θ)))
         return E.vectors, max.(E.values, min_precision)
@@ -138,7 +139,7 @@ function laplace_approximation(counts, X; censoring_lower = 0, censoring_upper =
     ## then polish on the original scale where the ridge with the main effects is straight
     lower, upper = minimum(intercept_dist), maximum(intercept_dist)
     to_θ(φ) = vcat(lower + (upper - lower) / (1 + exp(-φ[1])), φ[2:end])
-    θ0 = log_count_start(counts, X, censoring_lower, censoring_upper, intercept_dist, beta_dist, gamma_dist)
+    θ0 = log_count_start(counts, X, censoring_lower, censoring_upper, intercept_dist, beta_dist, gamma_dist; K)
     φ = newton(φ -> f(to_θ(φ)), vcat(log((θ0[1] - lower) / (upper - θ0[1])), θ0[2:end]), max_iter)
     θ = newton(f, to_θ(φ), 20)
     V, λ = precision_factor(f, θ)

@@ -163,8 +163,8 @@ king_data = load_king_data()
 
 ## Find the best architectures for 5 lists, 1-4 censoring
 MAE_4_df = MAE_df(4, 1, 4, intercept_files)
-best_NBE_4 = MAE_5_df[findmin(MAE_5_df.MAE_NBE)[2], :]
-best_NPE_4 = MAE_5_df[findmin(MAE_5_df.MAE_NPE)[2], :]
+best_NBE_4 = MAE_4_df[findmin(MAE_4_df.MAE_NBE)[2], :]
+best_NPE_4 = MAE_4_df[findmin(MAE_4_df.MAE_NPE)[2], :]
 
 model_king = load_model_nbe(
     n_lists = 4, 

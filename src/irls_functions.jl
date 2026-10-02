@@ -122,12 +122,14 @@ function importance_reference(
     ν = 4,
     scale = 1.5,
     probs = [0.025, 0.5, 0.975],
-    pilot_draws = nothing
+    pilot_draws = nothing,
+    K = nothing,
+    rng = Random.default_rng()
 )
     priors = (intercept_dist = intercept_dist, beta_dist = beta_dist, gamma_dist = gamma_dist)
-    logpost(θ) = log_posterior(θ, counts, X, censoring_lower, censoring_upper; priors...)
+    logpost(θ) = log_posterior(θ, counts, X, censoring_lower, censoring_upper; priors..., K)
     if isnothing(pilot_draws)
-        μ, L = laplace_approximation(counts, X; censoring_lower, censoring_upper, priors...)
+        μ, L = laplace_approximation(counts, X; censoring_lower, censoring_upper, priors..., K)
         Σ = Symmetric(L * L')
     else
         μ = vec(mean(pilot_draws, dims = 1))
@@ -137,14 +139,21 @@ function importance_reference(
         Σ = Symmetric(Σ + (abs(eigmin(Σ)) + 1e-6) * I)
     end
     q = MvTDist(ν, μ, Matrix(scale^2 * Σ))
-    θs = rand(q, n_draws)
+    θs = rand(rng, q, n_draws)
     logw = [logpost(θ) for θ in eachcol(θs)] .- logpdf(q, θs)
-    w = exp.(logw .- maximum(logw))
-    w ./= sum(w)
+    max_logw = maximum(logw)
+    w = exp.(logw .- max_logw)
+    sum_w = sum(w)
+    w ./= sum_w
     ess = 1 / sum(abs2, w)
+    ## Marginal likelihood up to the data-only constants dropped by likelihood_censored,
+    ## with the delta-method standard error of its logarithm
+    log_evidence = max_logw + log(sum_w) - log(n_draws)
+    log_evidence_se = sqrt(max(1 / ess - 1 / n_draws, 0))
 
     means = θs * w
     sds = sqrt.(max.((θs .^ 2) * w .- means .^ 2, 0))
     quantiles = [weighted_quantile(collect(row), w, p) for row in eachrow(θs), p in probs]
-    return (means = means, sds = sds, quantiles = quantiles, probs = probs, ess = ess)
+    return (means = means, sds = sds, quantiles = quantiles, probs = probs, ess = ess,
+        log_evidence = log_evidence, log_evidence_se = log_evidence_se, draws = θs, weights = w)
 end
