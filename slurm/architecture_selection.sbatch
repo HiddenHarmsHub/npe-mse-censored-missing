@@ -16,11 +16,11 @@ module load bear-apps/2022b/live
 module load Julia/1.10.0-linux-x86_64
 
 export JULIA_NUM_THREADS=1
-## The job was submitted with --export=MS_RUN only (submit_model_selection.sh), and srun steps inherit that
-## setting, so SlurmClusterManager's workers would start without the module-loaded PATH. Pass the job's
-## full environment, as set up above, to the worker steps.
-export SLURM_EXPORT_ENV=ALL
-echo "Model-selection run: ${MS_RUN:-b4_g4 (default; MS_RUN not set)}"
+## The model-selection run is the script's first argument (sbatch <script> <run>), default b4_g4. It is not
+## passed with --export: BlueBEAR jobs start from a clean environment, and changing what is exported
+## breaks either the module loads or the PATH that SlurmClusterManager's worker processes need.
+export MS_RUN="${1:-b4_g4}"
+echo "Model-selection run: ${MS_RUN}"
 
 ## One worker per architecture (24 per system); the master process starts them with SlurmManager
 julia --project src/architecture_selection.jl
