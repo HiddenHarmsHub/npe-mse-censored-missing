@@ -480,7 +480,12 @@ print(reliability_summary)
 is_df <- read_csv(file.path("output", "is_summary.csv"), show_col_types = FALSE)
 reference_agreement <- mcmc_df %>%
     select(dataset, parameters, mean_mcmc, mcse) %>%
-    inner_join(is_df %>% select(dataset, parameters, mean_is = estimated_means, sd_is = estimated_std, ess, pilot), by = c("dataset", "parameters")) %>%
+    inner_join(
+        is_df %>%
+            filter(is.finite(ess), ess >= 1e4) %>%
+            select(dataset, parameters, mean_is = estimated_means, sd_is = estimated_std, ess, pilot),
+        by = c("dataset", "parameters")
+    ) %>%
     left_join(mcmc_status %>% select(dataset, status), by = "dataset") %>%
     mutate(z = (mean_mcmc - mean_is) / sqrt(mcse^2 + sd_is^2 / ess)) %>%
     group_by(status, pilot) %>%

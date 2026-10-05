@@ -15,12 +15,15 @@ module load bear-apps/2022b/live
 module load Julia/1.10.0-linux-x86_64
 module load R/4.3.1-foss-2022b
 export JULIA_NUM_THREADS=1
+echo "Model-selection run: ${MS_RUN:-b4_g4 (default; MS_RUN not set)}"
 
-## Single-process steps: domain checks (with the embedding check now that classifiers exist),
-## summary tables, the real-data reanalysis, and figures if R is available
+## Single-process steps for the run in MS_RUN: domain checks (with the embedding check now that classifiers
+## exist), summary tables, the real-data reanalysis, the comparison across every run with results so far,
+## and figures if R is available
 julia --project src/model_selection_prior_predictive.jl
 julia --project src/model_selection_combine.jl
 julia --project src/model_selection_real_data.jl
+julia --project src/model_selection_compare_runs.jl
 if command -v Rscript > /dev/null; then
     Rscript src/model_selection_plots.R
 else

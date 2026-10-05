@@ -14,5 +14,6 @@ module purge; module load bluebear
 module load bear-apps/2022b/live
 module load Julia/1.10.0-linux-x86_64
 export JULIA_NUM_THREADS=1
+echo "Model-selection run: ${MS_RUN:-b4_g4 (default; MS_RUN not set)}"
 
 julia --project src/model_selection_test_data.jl

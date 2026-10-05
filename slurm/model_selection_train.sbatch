@@ -14,6 +14,7 @@ module purge; module load bluebear
 module load bear-apps/2022b/live
 module load Julia/1.10.0-linux-x86_64
 export JULIA_NUM_THREADS=1
+echo "Model-selection run: ${MS_RUN:-b4_g4 (default; MS_RUN not set)}"
 
 ## One worker per network: {A, B} × {classifier, conditional NPE} × 3 replicates.
 ## Finished networks are skipped, so resubmitting after a time-out continues where it stopped.

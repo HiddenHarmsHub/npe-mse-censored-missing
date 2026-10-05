@@ -15,7 +15,9 @@ cd "$(dirname "$0")/.."
 mkdir -p slurm_output
 
 export MS_RUN="${1:-b4_g4}"
-submit() { sbatch --parsable --job-name="$1_${MS_RUN}" "${@:2}"; }
+## BlueBEAR does not pass the submitting shell's environment to jobs, so MS_RUN is exported explicitly;
+## without it every job silently falls back to the default run b4_g4
+submit() { sbatch --parsable --export=ALL,MS_RUN="${MS_RUN}" --job-name="$1_${MS_RUN}" "${@:2}"; }
 
 test_data=$(submit ms_test_data slurm/model_selection_test_data.sbatch)
 if [[ -f output/architecture_selection/selected.csv ]]; then
