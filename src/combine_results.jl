@@ -14,6 +14,11 @@ CSV.write(
 
 dataset_number(file) = parse(Int, match(r"\d+", file).match)
 
+## Reference-inference outputs are restricted to the stratified benchmark datasets; mcmc_summary/ and
+## mcmc_samples/ may still hold files from the original 10,000-dataset run in the old format
+benchmark_datasets = CSV.read(joinpath("output", "benchmark_datasets.csv"), DataFrame).dataset
+benchmark_files(path) = filter(file -> dataset_number(file) in benchmark_datasets, readdir(path))
+
 ## Turing names (intercept, betas[i], gammas[j]) to the names used for NPE (alpha, beta_i, gamma_ij)
 function sampler_param_names(n_lists)
     pairs = [(i, j) for i in 1:(n_lists - 1) for j in (i + 1):n_lists]
@@ -28,7 +33,7 @@ name_map = sampler_param_names(5)
 ## combine mcmc and irls files
 function combine_sampler(method)
     summary_path = joinpath("output", "$(method)_summary")
-    summary_df = map(readdir(summary_path)) do file
+    summary_df = map(benchmark_files(summary_path)) do file
         df = CSV.read(joinpath(summary_path, file), DataFrame)
         df.dataset .= dataset_number(file)
         df.parameters = [name_map[p] for p in df.parameters]
@@ -49,7 +54,7 @@ function combine_sampler(method)
     CSV.write(joinpath("output", "$(method)_summary.csv"), vcat(summary_df...))
 
     diagnostics_path = joinpath("output", "$(method)_diagnostics")
-    diagnostics_df = [CSV.read(joinpath(diagnostics_path, file), DataFrame) for file in readdir(diagnostics_path)]
+    diagnostics_df = [CSV.read(joinpath(diagnostics_path, file), DataFrame) for file in benchmark_files(diagnostics_path)]
     CSV.write(joinpath("output", "$(method)_diagnostics.csv"), vcat(diagnostics_df...))
 end
 
@@ -57,7 +62,7 @@ combine_sampler("mcmc")
 combine_sampler("irls")
 
 ## importance-sampling reference for each benchmark dataset
-is_df = map(readdir(joinpath("output", "is_summary"))) do file
+is_df = map(benchmark_files(joinpath("output", "is_summary"))) do file
     df = CSV.read(joinpath("output", "is_summary", file), DataFrame)
     df.dataset .= dataset_number(file)
     df.parameters = [name_map[p] for p in df.parameters]
@@ -87,8 +92,6 @@ CSV.write(
 
 ## Fractional rank of the truth among the posterior draws for each benchmark dataset.
 ## A central credible interval at level L contains the truth iff (1 - L) / 2 <= rank <= (1 + L) / 2.
-benchmark_datasets = CSV.read(joinpath("output", "benchmark_datasets.csv"), DataFrame).dataset
-
 function sbc_ranks(method, samples_dir, samples_prefix, summary_dir, summary_prefix)
     rows = DataFrame[]
     for dataset in benchmark_datasets
