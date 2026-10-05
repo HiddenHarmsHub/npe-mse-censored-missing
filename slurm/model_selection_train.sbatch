@@ -14,6 +14,10 @@ module purge
 module load bear-apps/2022b/live
 module load Julia/1.10.0-linux-x86_64
 export JULIA_NUM_THREADS=1
+## The job was submitted with --export=MS_RUN only (submit_model_selection.sh), and srun steps inherit that
+## setting, so SlurmClusterManager's workers would start without the module-loaded PATH. Pass the job's
+## full environment, as set up above, to the worker steps.
+export SLURM_EXPORT_ENV=ALL
 echo "Model-selection run: ${MS_RUN:-b4_g4 (default; MS_RUN not set)}"
 
 ## One worker per network: {A, B} × {classifier, conditional NPE} × 3 replicates.
