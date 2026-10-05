@@ -10,7 +10,7 @@
 
 set -euo pipefail
 cd "${SLURM_SUBMIT_DIR}"
-module purge; module load bluebear
+module purge
 module load bear-apps/2022b/live
 module load Julia/1.10.0-linux-x86_64
 module load R/4.3.1-foss-2022b
