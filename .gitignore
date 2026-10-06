@@ -10,6 +10,7 @@ output/npe_samples/
 output/npe_summary/
 output/intercept_estimates/
 slurm_output/
+logs/
 output/speed_comparisons/
 output/intercept_estimate_comparison.csv
 paper_submission/
