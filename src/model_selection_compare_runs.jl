@@ -26,6 +26,8 @@ tag(df, r) = (df.run .= r.run; df.prior .= prior_label(r); df)
 ## Summaries of possibly empty groups (e.g. a reference dataset not in the evaluated part of the test set)
 emedian(x) = isempty(x) ? missing : median(x)
 emean(x) = isempty(x) ? missing : mean(x)
+## Stack per-system tables, or nothing when a run has none yet (e.g. its real-data step has not run)
+stack_systems(tables) = (t = filter(!isnothing, tables); isempty(t) ? nothing : vcat(t...; cols = :union))
 stack_runs(f) = vcat(filter(!isnothing, [f(r) for r in runs])...; cols = :union)
 
 ## ---- Training: epochs run, best epoch and best validation loss per network ----
@@ -88,29 +90,29 @@ CSV.write(joinpath(output_path, "reference_agreement.csv"), agreement)
 
 ## ---- Real data: population size, inclusion probabilities, leading structures, domain checks ----
 real_population = stack_runs() do r
-    vcat(filter(!isnothing, map(["A", "B"]) do s
+    stack_systems(map(["A", "B"]) do s
         df = read_if(joinpath(model_selection_output_path(r), "real_data", "$(s)_population.csv"))
         isnothing(df) ? nothing : (df.system .= s; tag(filter(:quantity => in(["N0", "N"]), df), r))
-    end)...; cols = :union)
+    end)
 end
 CSV.write(joinpath(output_path, "real_data_population.csv"), real_population)
 
 real_inclusion = stack_runs() do r
-    vcat(filter(!isnothing, map(["A", "B"]) do s
+    stack_systems(map(["A", "B"]) do s
         df = read_if(joinpath(model_selection_output_path(r), "real_data", "$(s)_inclusion.csv"); types = Dict(:pair => String))
         isnothing(df) ? nothing : (df.system .= s; tag(df, r))
-    end)...; cols = :union)
+    end)
 end
 CSV.write(joinpath(output_path, "real_data_inclusion.csv"), real_inclusion)
 
 real_top = stack_runs() do r
-    vcat(filter(!isnothing, map(["A", "B"]) do s
+    stack_systems(map(["A", "B"]) do s
         df = read_if(joinpath(model_selection_output_path(r), "real_data", "$(s)_model_probabilities.csv"); types = Dict(:label => String))
         isnothing(df) && return nothing
         rows = [(system = s, source = col, rank = k, structure = row.label, prob = row[col])
                 for col in ["neural_primary", "reference_primary"] for (k, row) in enumerate(eachrow(first(sort(df, col, rev = true), 5)))]
         tag(DataFrame(rows), r)
-    end)...; cols = :union)
+    end)
 end
 CSV.write(joinpath(output_path, "real_data_top_structures.csv"), real_top)
 

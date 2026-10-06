@@ -162,6 +162,14 @@ const model_selection_runs = Dict(
     ## Prior sensitivity: β, γ ~ N(0, 2²) and N(0, 1), with the same training settings
     "b2_g2" => (run = "b2_g2", label = "N(0, 2²)", beta_mean = 0, beta_sd = 2, gamma_sd = 2, retraining_settings...),
     "b1_g1" => (run = "b1_g1", label = "N(0, 1)", beta_mean = 0, beta_sd = 1, gamma_sd = 1, retraining_settings...),
+    ## The retrained N(0, 4²) conditional NPEs were far from converged (validation loss still falling by about
+    ## 2 nats over their last 50 epochs) and the classifiers gained 0.1-0.2 nats in their final annealing phase,
+    ## so the same settings with a three times (conditional NPE) and two times (classifier) longer schedule,
+    ## trained from scratch. Warm restarts from b4_g4r were tried and rejected: with a fresh Adam state even
+    ## a peak learning rate of 3e-6 pushed a converged flow off its optimum.
+    "b4_g4x" => (run = "b4_g4x", label = "N(0, 4²), extended training", beta_mean = 0, beta_sd = 4, gamma_sd = 4,
+        classifier = merge(retraining_settings.classifier, (epochs = 800, stopping_epochs = 100)),
+        cnpe = merge(retraining_settings.cnpe, (epochs = 600, stopping_epochs = 100))),
 )
 model_selection_run(name = get(ENV, "MS_RUN", "b4_g4")) = model_selection_runs[name]
 

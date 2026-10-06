@@ -2,6 +2,7 @@
 ## Submit the model-selection pipeline for one run, with dependencies. From the repository root:
 ##   bash slurm/submit_model_selection.sh            # original run, b4_g4: β, γ ~ N(0, 4²)
 ##   bash slurm/submit_model_selection.sh b4_g4r     # original priors retrained with the new settings
+##   bash slurm/submit_model_selection.sh b4_g4x     # original priors, new settings, longer schedule
 ##   bash slurm/submit_model_selection.sh b2_g2      # β, γ ~ N(0, 2²), new settings
 ##   bash slurm/submit_model_selection.sh b1_g1      # β, γ ~ N(0, 1), new settings
 ## Runs are defined in model_selection_runs (src/model_selection_functions.jl). The run name reaches the

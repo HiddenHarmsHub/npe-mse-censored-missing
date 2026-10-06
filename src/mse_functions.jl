@@ -390,7 +390,13 @@ function one_hot_encode_parameters(K::Int)
     return one_hot_matrix
 end
 
-function train_npe(n_lists, width, n_hidden, encoding_dim, train_size; m = 1, censoring_lower = 0, censoring_upper = 0, savepath = nothing, intercept_dist = Uniform(1, 10))
+## The training keywords default to the settings used for the shipped NPE models
+function train_npe(
+    n_lists, width, n_hidden, encoding_dim, train_size;
+    m = 1, censoring_lower = 0, censoring_upper = 0, savepath = nothing, intercept_dist = Uniform(1, 10),
+    epochs = 200, stopping_epochs = 5, K_val = train_size ÷ 5 + 1, batchsize = 32, learning_rate = 5e-4,
+    num_coupling_layers = 6, input_scale = nothing, training_path = nothing
+)
     estimator_mdl_str = "model_$(n_lists)_$(width)_$(n_hidden)_$(encoding_dim)_$(train_size)_$(censoring_lower)_$(censoring_upper)_$(m).bson"
     n_data = 2^n_lists - 1
     n_pars = 1 + n_lists + binomial(n_lists, 2)  # intercept + betas + gammas
@@ -409,23 +415,31 @@ function train_npe(n_lists, width, n_hidden, encoding_dim, train_size; m = 1, ce
         return hcat(Z...)
     end
     
+    ## Optional per-input rescaling of the log-counts (which reach ~43), initialised at input_scale
+    input_layer = isnothing(input_scale) ? () : (Flux.Scale(fill(Float32(input_scale), n_data), false),)
     network = Chain(
+        input_layer...,
         Dense(n_data, width, relu),
         [Dense(width, width, relu) for _ in 1:n_hidden]...,
         Dense(width, encoding_dim)
     )
-    
-    
-    q = NormalisingFlow(n_pars, encoding_dim)
+
+
+    q = NormalisingFlow(n_pars, encoding_dim; num_coupling_layers = num_coupling_layers)
     estimator = PosteriorEstimator(q, network)
-    
+
     estimator = train(
-        estimator, 
-        sample_nbe, 
-        simulate_nbe, 
+        estimator,
+        sample_nbe,
+        simulate_nbe,
         K = train_size,
+        K_val = K_val,
         m = m,
-        epochs = 200
+        epochs = epochs,
+        stopping_epochs = stopping_epochs,
+        batchsize = batchsize,
+        optimiser = Flux.setup(Adam(learning_rate), estimator),
+        savepath = training_path
     )
     
     if !isnothing(savepath) 
