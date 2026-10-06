@@ -17,7 +17,7 @@ n_posterior_draws = 2000
 widths = [8, 16, 32, 64, 128, 256]
 hidden = [1, 2, 3, 4]
 @everywhere encoding_dim = 128
-@everywhere train_size = 10000
+@everywhere train_size = train_size_default
 
 ## Pre-specified rule: smallest intercept MAE among architectures with 95% intercept coverage
 ## within 0.02 of nominal and mean calibration deviation (all parameters, 50/80/95%) at most 0.03.

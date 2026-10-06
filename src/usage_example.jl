@@ -34,7 +34,7 @@ input_data = prepare_data(user_inputted_data);
 function load_nbe(K, censoring_lower, censoring_upper, models_path, ci = false)
     width = 256
     n_hidden = 3
-    train_size = 10000
+    train_size = 200000
     m = 1
     if ci
         mdl_str = "model_ci_$(K)_$(width)_$(n_hidden)_$(train_size)_$(censoring_lower)_$(censoring_upper)_$m.bson"
@@ -66,7 +66,7 @@ nbe_estimates_ci = reshape(nbe_estimator_ci(input_data), (16, 2))
 function load_npe(K, censoring_lower, censoring_upper, models_path; encoding_dim = 128)
     width = 256
     n_hidden = 3
-    train_size = 10000
+    train_size = 200000
     m = 1
     mdl_str = "model_$(K)_$(width)_$(n_hidden)_$(encoding_dim)_$(train_size)_$(censoring_lower)_$(censoring_upper)_$m.bson"
     model = BSON.load(joinpath(models_path, mdl_str))

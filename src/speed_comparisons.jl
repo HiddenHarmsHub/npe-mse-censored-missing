@@ -21,7 +21,7 @@ end
     n_lists = 5
     width = 256
     n_hidden = 3
-    train_size = 10000
+    train_size = train_size_default
     train_nbe() = train_model_mlp(
         n_lists, 
         width, 
@@ -31,7 +31,8 @@ end
         censoring_lower = 0, 
         censoring_upper = 10, 
         savepath = nothing, 
-        intercept_dist = Uniform(1, 10)
+        intercept_dist = Uniform(1, 10);
+        training_settings...
     )
 
     encoding_dim = 128
@@ -45,12 +46,14 @@ end
         m = 1,
         censoring_lower = 0,
         censoring_upper = 10,
-        savepath = nothing
+        savepath = nothing,
+        num_coupling_layers = npe_num_coupling_layers;
+        training_settings...
     )
 
     train_nbe() ## warmup
     train_npe_fixed() ## warmup
-    n_runs = 10
+    n_runs = 3  # each run is several hours at the full training budget
     train_df = DataFrame()
     for _ in 1:n_runs
         push!(train_df, (method = "NBE", train_time = time_function(train_nbe, ())))
@@ -80,7 +83,7 @@ end
         5, 
         256, 
         3,
-        10000,
+        train_size_default,
         0, 
         10, 
         1, 
@@ -91,7 +94,7 @@ end
         5,
         256,
         3,
-        10000,
+        train_size_default,
         0,
         10,
         1,
@@ -102,7 +105,7 @@ end
         5,
         256,
         3,
-        10000,
+        train_size_default,
         0,
         10,
         1,

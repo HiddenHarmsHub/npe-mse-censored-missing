@@ -265,6 +265,12 @@ end
     @test original_priors(r) && r.cnpe == model_selection_runs["b1_g1"].cnpe
     @test model_selection_output_path(r) == joinpath("output", "model_selection_b4_g4r")
     @test allunique([run.label for run in values(model_selection_runs)])
+    ## The extended N(0, 4²) run: same priors and settings as b4_g4r but a longer schedule, in its own folders
+    ax = model_selection_config(model_selection_systems["A"], model_selection_runs["b4_g4x"]; selected_path = selected)
+    @test original_priors(model_selection_runs["b4_g4x"])
+    @test ax.classifier.epochs == 800 && ax.cnpe.epochs == 600 && ax.cnpe.stopping_epochs == 100
+    @test ax.classifier.width == 256 && ax.cnpe.lr == model_selection_runs["b4_g4r"].cnpe.lr
+    @test models_path(ax) == joinpath("output", "models_model_selection_b4_g4x")
     ## Training options: clipping chains Adam after ClipNorm and NeuralEstimators can read its learning rate
     est = PointEstimator(Chain(Dense(3, 4), Dense(4, 2)))
     opts = training_options(a1.cnpe, est)

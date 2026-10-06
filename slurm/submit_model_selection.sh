@@ -13,7 +13,7 @@
 ## simulation study waits for training and test data; post-processing waits for both studies.
 set -euo pipefail
 cd "$(dirname "$0")/.."
-mkdir -p slurm_output
+mkdir -p logs
 
 MS_RUN="${1:-b4_g4}"
 ## The run name goes to each job as the sbatch script's argument (BlueBEAR does not pass the submitting

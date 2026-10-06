@@ -3,6 +3,13 @@ using Distributions, Flux, BSON, DataFrames, CSV, Combinatorics, Folds, Random
 import NeuralEstimators: sampleposterior
 using NeuralEstimators
 
+## Training budget for the NBE and NPE models (simulations per epoch is the train_size in model filenames).
+## Chosen from the NPE pilot (npe_pilot.jl): the original 10,000 simulations per epoch with early stopping after
+## 5 epochs left the NPE under-trained, with over-wide posteriors.
+const train_size_default = 200_000
+const training_settings = (epochs = 100, stopping_epochs = 15, K_val = 20_000, batchsize = 256, learning_rate = 1e-3, input_scale = 0.1)
+const npe_num_coupling_layers = 10
+
 function sample_parameters(
     K::Int; 
     intercept_dist = Uniform(1, 10), 
@@ -133,7 +140,7 @@ function compute_digit_pairs(n::String; filter_terms = nothing)
     return digits, pairs
 end
 
-function construct_MLP(width::Int, n_hidden::Int, n_lists::Int, censoring::Bool = false, intercept_support = nothing)
+function construct_MLP(width::Int, n_hidden::Int, n_lists::Int, censoring::Bool = false, intercept_support = nothing; input_scale = nothing)
     n_data = 2^n_lists - 1
     n_pars = 1 + n_lists + binomial(n_lists, 2)  # intercept + betas + gammas
     if censoring
@@ -151,7 +158,9 @@ function construct_MLP(width::Int, n_hidden::Int, n_lists::Int, censoring::Bool 
         final_layer = Dense(width, n_pars)
     end
 
+    input_layer = isnothing(input_scale) ? () : (Flux.Scale(fill(Float32(input_scale), n_data), false),)
     return Chain(
+        input_layer...,
         Dense(n_data, width, relu),
         [Dense(width, width, relu) for _ in 1:n_hidden]...,
         final_layer
@@ -159,7 +168,13 @@ function construct_MLP(width::Int, n_hidden::Int, n_lists::Int, censoring::Bool 
 end
 
 
-function train_model_mlp(n_lists, width, n_hidden, train_size; m = 1, censoring_lower = 0, censoring_upper = 0, savepath = nothing, intercept_dist = Uniform(1, 10))
+## The training keywords default to the settings used for the original NBE models
+function train_model_mlp(
+    n_lists, width, n_hidden, train_size;
+    m = 1, censoring_lower = 0, censoring_upper = 0, savepath = nothing, intercept_dist = Uniform(1, 10),
+    epochs = 100, stopping_epochs = 5, K_val = train_size ÷ 5 + 1, batchsize = 32, learning_rate = 5e-4,
+    input_scale = nothing, training_path = nothing
+)
     estimator_mdl_str = "model_$(n_lists)_$(width)_$(n_hidden)_$(train_size)_$(censoring_lower)_$(censoring_upper)_$(m).bson"
     ci_mdl_str = "model_ci_$(n_lists)_$(width)_$(n_hidden)_$(train_size)_$(censoring_lower)_$(censoring_upper)_$(m).bson"
 
@@ -175,25 +190,29 @@ function train_model_mlp(n_lists, width, n_hidden, train_size; m = 1, censoring_
         end 
         return hcat(Z...)
     end
-    network = construct_MLP(width, n_hidden, n_lists, censoring_upper > 0, intercept_support)
+    network = construct_MLP(width, n_hidden, n_lists, censoring_upper > 0, intercept_support; input_scale = input_scale)
     estimator = PointEstimator(network)
 
     ci_estimator = IntervalEstimator(network)
 
+    options(estimator, name) = (
+        K = train_size, K_val = K_val, m = m, epochs = epochs, stopping_epochs = stopping_epochs, batchsize = batchsize,
+        optimiser = Flux.setup(Adam(learning_rate), estimator),
+        savepath = isnothing(training_path) ? nothing : joinpath(training_path, name)
+    )
+
     estimator = train(
         estimator, 
         sample_nbe, 
-        simulate_nbe, 
-        K = train_size,
-        m = m
+        simulate_nbe;
+        options(estimator, "point")...
     )
 
     ci_estimator = train(
         ci_estimator, 
         sample_nbe, 
-        simulate_nbe, 
-        K = train_size,
-        m = m
+        simulate_nbe;
+        options(ci_estimator, "interval")...
     )
 
     if !isnothing(savepath) 

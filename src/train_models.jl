@@ -1,8 +1,11 @@
 using Pkg; Pkg.activate(".")
 using Distributed, SlurmClusterManager
-addprocs(SlurmManager(); exeflags=["--threads", "1", "--project"])
+## Each worker gets the cores Slurm allocates per task: simulation (Folds) and BLAS both use threads
+addprocs(SlurmManager(); exeflags=["--threads", get(ENV, "SLURM_CPUS_PER_TASK", "1"), "--project"])
 
 @everywhere include("mse_functions.jl")
+@everywhere using LinearAlgebra
+@everywhere BLAS.set_num_threads(Threads.nthreads())
 
 ## Train models for each of the sensitivity analyses
 
@@ -14,7 +17,7 @@ grid_lists = collect(Base.product(
     [3, 4, 5, 6, 10],
     [256], 
     [3], 
-    [10000],
+    [train_size_default],
     [0],
     [10],
     [1]
@@ -25,7 +28,7 @@ grid_neurons = collect(Base.product(
     [5],
     [8, 16, 32, 64, 128, 256],
     [3],
-    [10000],
+    [train_size_default],
     [0],
     [10],
     [1]
@@ -35,7 +38,7 @@ grid_hidden = collect(Base.product(
     [5],
     [256],
     [1, 2, 3, 4, 5],
-    [10000],
+    [train_size_default],
     [0],
     [10],
     [1]
@@ -46,7 +49,7 @@ grid_censoring = collect(Base.product(
     [5],
     [256],
     [3],
-    [10000],
+    [train_size_default],
     [0],
     [0, 2, 4, 8, 16, 32, 64, 128],
     [1]
@@ -57,7 +60,7 @@ grid_4 = collect(Base.product(
     [4],
     [8, 16, 32, 64, 128, 256],
     [1, 2, 3, 4],
-    [10000],
+    [train_size_default],
     [1],
     [4],
     [1]
@@ -68,7 +71,7 @@ grid_5 = collect(Base.product(
     [5],
     [8, 16, 32, 64, 128, 256],
     [1, 2, 3, 4],
-    [10000],
+    [train_size_default],
     [0],
     [0],
     [1]
@@ -79,7 +82,7 @@ grid_6 = collect(Base.product(
     [6],
     [8, 16, 32, 64, 128, 256],
     [1, 2, 3, 4],
-    [10000],
+    [train_size_default],
     [0],
     [0],
     [1]
@@ -120,6 +123,9 @@ combined_grid = vcat(
     [(model..., "npe") for model in grid_npe]
 )
 
+## Most expensive first (more lists, then wider networks) so long jobs do not finish last
+combined_grid = sort(combined_grid, by = task -> (task[1], task[2], task[3]), rev = true)
+
 println("Total combined models to train: ", length(combined_grid))
 
 pmap(
@@ -138,7 +144,8 @@ pmap(
                 censoring_lower = model[5],
                 censoring_upper = model[6],
                 m = model[7],
-                savepath = output_path_nbe
+                savepath = output_path_nbe;
+                training_settings...
             )
         else  # "npe"
             println("Worker $wid training NPE with parameters: list_size=$(model[1]), width=$(model[2]), n_hidden=$(model[3]), train_size=$(model[4]), censoring_lower=$(model[5]) censoring_upper=$(model[6]), m=$(model[7])")
@@ -151,7 +158,9 @@ pmap(
                 censoring_lower = model[5],
                 censoring_upper = model[6],
                 m = model[7],
-                savepath = output_path_npe
+                savepath = output_path_npe,
+                num_coupling_layers = npe_num_coupling_layers;
+                training_settings...
             )
         end
     end,

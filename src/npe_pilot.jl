@@ -59,7 +59,9 @@ if !isfile(evaluation_file)
 end
 
 ## Calibration on non-capped datasets, accuracy of the hidden population, and agreement with validated NUTS
-evaluation = leftjoin(CSV.read(evaluation_file, DataFrame), select(benchmark, :dataset, :capped), on = :dataset)
+## Cap flags come from the loaded test data, so the summary is right even if it differs from the cluster's
+evaluation = CSV.read(evaluation_file, DataFrame)
+evaluation.capped = [is_capped(Float64.(test_pars[:, d])) for d in evaluation.dataset]
 mcmc = CSV.read(joinpath("output", "mcmc_summary.csv"), DataFrame)
 status = CSV.read(joinpath("output", "mcmc_diagnostics.csv"), DataFrame)
 validated = Set(status.dataset[status.status .!= "failed"])

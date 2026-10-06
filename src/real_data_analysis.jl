@@ -22,7 +22,7 @@ end
 
 function MAE_df(n_lists, censoring_lower, censoring_upper, intercept_files)
     intercept_df = get_intercept_df(intercept_files)
-    filtered_df = filter(x -> x.n_lists == n_lists .&& x.censoring_lower == censoring_lower .&& x.censoring_upper == censoring_upper, intercept_df)
+    filtered_df = filter(x -> x.n_lists == n_lists .&& x.censoring_lower == censoring_lower .&& x.censoring_upper == censoring_upper .&& x.train_size == train_size_default, intercept_df)
     gdf = groupby(filtered_df, [:width, :n_hidden, :train_size])
     summary = combine(gdf, 
         [:intercept_NPE, :intercept_truth] => ((npe, truth) -> mean(abs.(npe .- truth))) => :MAE_NPE,
@@ -40,7 +40,7 @@ model_silverman = load_model_nbe(
     n_lists = 5, 
     width = best_NBE_5.width,
     n_hidden = best_NBE_5.n_hidden,
-    train_size = 10000,
+    train_size = train_size_default,
     censoring_lower = 0, 
     censoring_upper = 0, 
     m = 1
@@ -50,7 +50,7 @@ ci_silverman = load_model_nbe(
     n_lists = 5, 
     width = best_NBE_5.width,
     n_hidden = best_NBE_5.n_hidden,
-    train_size = 10000,
+    train_size = train_size_default,
     censoring_lower = 0, 
     censoring_upper = 0, 
     m = 1,
@@ -78,7 +78,7 @@ npe_model_silverman = load_model_npe(
     5, 
     best_NPE_5.width, 
     best_NPE_5.n_hidden,
-    10000,
+    train_size_default,
     0, 
     0, 
     1, 
@@ -170,7 +170,7 @@ model_king = load_model_nbe(
     n_lists = 4, 
     width = best_NBE_4.width,
     n_hidden = best_NBE_4.n_hidden,
-    train_size = 10000, 
+    train_size = train_size_default, 
     censoring_lower = 1,
     censoring_upper = 4,
     m = 1
@@ -180,7 +180,7 @@ ci_king = load_model_nbe(
     n_lists = 4, 
     width = best_NBE_4.width,
     n_hidden = best_NBE_4.n_hidden,
-    train_size = 10000, 
+    train_size = train_size_default, 
     censoring_lower = 1,
     censoring_upper = 4,
     m = 1,
@@ -206,7 +206,7 @@ npe_model_king = load_model_npe(
     4, 
     best_NPE_4.width, 
     best_NPE_4.n_hidden,
-    10000,
+    train_size_default,
     1, 
     4, 
     1, 

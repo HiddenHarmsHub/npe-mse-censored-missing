@@ -93,7 +93,7 @@ ape_df <- read_csv(
         n_lists = as.factor(n_lists)
     )
 
-train_size_fixed <- 10000
+train_size_fixed <- 200000
 panel_spacing_fixed <- 4
 
 ## Width/number of neurons sensitivity plot

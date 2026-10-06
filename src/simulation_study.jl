@@ -119,7 +119,7 @@ NPE_estimator = load_model_npe(
     5, 
     256, 
     3,
-    10000,
+    train_size_default,
     0, 
     10, 
     1, 

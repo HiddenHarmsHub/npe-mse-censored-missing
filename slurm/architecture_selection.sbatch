@@ -4,7 +4,7 @@
 #SBATCH --cpus-per-task=1
 #SBATCH --mem-per-cpu=4G
 #SBATCH --time=04:00:00
-#SBATCH --output=slurm_output/%x_%j.out
+#SBATCH --output=logs/%x_%j.out
 #SBATCH --mail-type=ALL
 #SBATCH --mail-user=j.s.marsh@bham.ac.uk
 
