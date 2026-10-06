@@ -164,8 +164,10 @@ pmap(
             )
         end
     end,
-    combined_grid
+    combined_grid;
+    ## A worker that crashes loses only its current model; the rest carry on and a resubmission retrains it
+    on_error = e -> (println("Training task failed: ", sprint(showerror, e)); nothing)
 )
 
-println("Finished training all models.")
+println("Finished training. Models still missing are retrained by resubmitting this job.")
 
