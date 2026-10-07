@@ -225,8 +225,9 @@ CSV.write(
 )
 
 ## compare with mcmc
-king_data_reduced = king_data[1:15]
-input_counts = Int.(ifelse.(king_data_reduced .== -1.0, -1.0, floor.(exp.(king_data_reduced) .- 1)))
+## Raw counts with -1 for the suppressed cells. Recovering them from the Float32 log-counts with
+## floor(exp(.) - 1) loses 1 to rounding error (cell 23 became 11 instead of 12).
+input_counts = load_king_counts()
 X = one_hot_encode_parameters(4)
 
 intercept_dist = Uniform(1, 10)
@@ -272,19 +273,19 @@ CSV.write(
 
 ## compute MLEs
 
-# Initial parameter values
-initial_pars = rand(length(param_names(4)))  # or use a better initial guess
+neg_loglik(pars) = -likelihood_censored(input_counts, pars, X, censoring_lower, censoring_upper)
 
-# Define negative log-likelihood
-neg_loglik(pars) = -likelihood_censored(input_counts, pars, X, 1, 4)
-
-# Optimize
-result = optimize(
-    neg_loglik, 
-    initial_pars, 
-    BFGS(),
-    autodiff = :forward
+## Best of several local optimisations: a deterministic start from weighted least squares on the log counts
+## (with a negligible ridge) plus random starts. A single random start can stop far from the maximum.
+Random.seed!(1)
+n_pars = length(param_names(4))
+starts = vcat(
+    [log_count_start(input_counts, X, censoring_lower, censoring_upper, Uniform(-100, 100), Normal(0, 100), Normal(0, 100))],
+    [randn(n_pars) for _ in 1:20]
 )
+results = [optimize(neg_loglik, start, BFGS(), Optim.Options(g_tol = 1e-8, iterations = 10_000); autodiff = :forward) for start in starts]
+result = results[argmin(Optim.minimum.(results))]
+Optim.converged(result) || @warn "The King MLE optimisation did not converge."
 
 # Extract optimized parameters
 optimal_pars = Optim.minimizer(result)

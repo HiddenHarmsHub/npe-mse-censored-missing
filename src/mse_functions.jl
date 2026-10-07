@@ -389,6 +389,14 @@ function load_king_data()
 end
 
 
+## King data as integer counts in cell order, with -1 for the suppressed (censored) cells
+function load_king_counts()
+    king = DataFrame(CSV.File(joinpath("data", "king.csv")))
+    lookup = Dict(string(g) => c for (g, c) in zip(king.group, king.count))
+    return [let v = get(lookup, replace(cell, "," => ""), "0"); v == "missing" ? -1 : parse(Int, string(v)) end
+            for cell in enumerate_all_combinations(4)]
+end
+
 function one_hot_encode_parameters(K::Int)
     n_gamma = binomial(K, 2)
     n_pars = 1 + K + n_gamma
