@@ -100,9 +100,11 @@ for s in ["A", "B"]
         append!(rows, population_rows("neural_conditional: $name", sample_conditional_population(cnpe_ensemble, y, mask, n_draws, system; counts_obs)))
     end
     ## The fixed-model NPE was trained under the original priors, so it is compared only in runs that use them
-    if original_priors(run)
-        row = only(eachrow(filter(r -> r.n_lists == K && r.censoring_upper == system.censoring_upper, selected)))
-        fixed_npe = BSON.load(joinpath("output", "models_npe", row.model_file))[:estimator]
+    row = only(eachrow(filter(r -> r.n_lists == K && r.censoring_upper == system.censoring_upper, selected)))
+    fixed_file = joinpath("output", "models_npe", row.model_file)
+    original_priors(run) && !isfile(fixed_file) && @warn "Fixed-structure NPE $fixed_file not found; it is left out of the comparison."
+    if original_priors(run) && isfile(fixed_file)
+        fixed_npe = BSON.load(fixed_file)[:estimator]
         θ_fixed = bounded_draws(fixed_npe, reshape(y, :, 1), n_draws)
         append!(rows, population_rows("fixed_model_npe", population_draws(θ_fixed, counts_obs; system.censoring_lower, system.censoring_upper)))
     end

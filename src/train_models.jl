@@ -100,7 +100,7 @@ grid_nbe = filter(model -> model[5] <= model[6], grid_nbe)
 
 overwrite_models = false
 if !overwrite_models
-    grid_nbe = filter(model -> !isfile(joinpath(output_path_nbe, "model_$(model[1])_$(model[2])_$(model[3])_$(model[4])_$(model[5])_$(model[6])_$(model[7]).bson")), grid_nbe)
+    grid_nbe = filter(model -> !isfile(joinpath(output_path_nbe, "model_$(join(model, "_")).bson")), grid_nbe)
 end
 
 println("Models to train after filtering: ", length(grid_nbe))

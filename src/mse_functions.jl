@@ -2,6 +2,7 @@ using Distributions, Flux, BSON, DataFrames, CSV, Combinatorics, Folds, Random
 
 import NeuralEstimators: sampleposterior
 using NeuralEstimators
+include("nbe_layers.jl")
 
 ## Training budget for the NBE and NPE models (simulations per epoch is the train_size in model filenames).
 ## Chosen from the NPE pilot (npe_pilot.jl): the original 10,000 simulations per epoch with early stopping after
@@ -167,8 +168,27 @@ function construct_MLP(width::Int, n_hidden::Int, n_lists::Int, censoring::Bool 
     )
 end
 
+## NBE network: one MLP whose final layer gives the stacked 0.025, 0.5 and 0.975 quantiles of all parameters
+function construct_quantile_MLP(width::Int, n_hidden::Int, n_lists::Int, censoring::Bool = false, intercept_support = nothing; input_scale = nothing)
+    n_data = 2^n_lists - 1
+    n_pars = 1 + n_lists + binomial(n_lists, 2)  # intercept + betas + gammas
+    if censoring
+        n_data *= 2  # Double the input size for censored data (U and W)
+    end
 
-## The training keywords default to the settings used for the original NBE models
+    input_layer = isnothing(input_scale) ? () : (Flux.Scale(fill(Float32(input_scale), n_data), false),)
+    return Chain(
+        input_layer...,
+        Dense(n_data, width, relu),
+        [Dense(width, width, relu) for _ in 1:n_hidden]...,
+        Dense(width, 3 * n_pars),
+        MonotoneQuantiles(n_pars, intercept_support)
+    )
+end
+
+
+## NBE: one network for the 0.025, 0.5 and 0.975 posterior quantiles of every parameter, trained on the
+## summed quantile (pinball) loss. The training keywords default to the settings used for the original NBE models.
 function train_model_mlp(
     n_lists, width, n_hidden, train_size;
     m = 1, censoring_lower = 0, censoring_upper = 0, savepath = nothing, intercept_dist = Uniform(1, 10),
@@ -176,7 +196,6 @@ function train_model_mlp(
     input_scale = nothing, training_path = nothing
 )
     estimator_mdl_str = "model_$(n_lists)_$(width)_$(n_hidden)_$(train_size)_$(censoring_lower)_$(censoring_upper)_$(m).bson"
-    ci_mdl_str = "model_ci_$(n_lists)_$(width)_$(n_hidden)_$(train_size)_$(censoring_lower)_$(censoring_upper)_$(m).bson"
 
     intercept_support = ifelse(typeof(intercept_dist) <: Uniform, params(intercept_dist), nothing)
 
@@ -190,34 +209,22 @@ function train_model_mlp(
         end 
         return hcat(Z...)
     end
-    network = construct_MLP(width, n_hidden, n_lists, censoring_upper > 0, intercept_support; input_scale = input_scale)
+
+    network = construct_quantile_MLP(width, n_hidden, n_lists, censoring_upper > 0, intercept_support; input_scale = input_scale)
     estimator = PointEstimator(network)
-
-    ci_estimator = IntervalEstimator(network)
-
-    options(estimator, name) = (
-        K = train_size, K_val = K_val, m = m, epochs = epochs, stopping_epochs = stopping_epochs, batchsize = batchsize,
-        optimiser = Flux.setup(Adam(learning_rate), estimator),
-        savepath = isnothing(training_path) ? nothing : joinpath(training_path, name)
-    )
 
     estimator = train(
         estimator, 
         sample_nbe, 
         simulate_nbe;
-        options(estimator, "point")...
-    )
-
-    ci_estimator = train(
-        ci_estimator, 
-        sample_nbe, 
-        simulate_nbe;
-        options(ci_estimator, "interval")...
+        loss = (θ̂, θ) -> quantileloss(θ̂, θ, nbe_probs),
+        K = train_size, K_val = K_val, m = m, epochs = epochs, stopping_epochs = stopping_epochs, batchsize = batchsize,
+        optimiser = Flux.setup(Adam(learning_rate), estimator),
+        savepath = training_path
     )
 
     if !isnothing(savepath) 
         BSON.@save joinpath(savepath, estimator_mdl_str) estimator
-        BSON.@save joinpath(savepath, ci_mdl_str) ci_estimator
         return nothing
     else
         return estimator
@@ -306,14 +313,21 @@ function load_silverman_data(K::Int = 5)
     return output
 end
 
-function load_model_nbe(n_lists, width, n_hidden, train_size, censoring_lower, censoring_upper, m, models_path)
-    mdl_str = "model_$(n_lists)_$(width)_$(n_hidden)_$(train_size)_$(censoring_lower)_$(censoring_upper)_$m.bson"
-    if isfile(joinpath(models_path, mdl_str))
-        model = BSON.load(joinpath(models_path, mdl_str))
-        return model[:estimator]
-    else
-        error("Model file $(mdl_str) not found in $(models_path).")
+## NBE outputs the stacked quantiles [q0.025; q0.5; q0.975], each of length n_pars. The loaders return the
+## median (ci = false) or [lower; upper] bounds (ci = true) as functions of the data, as the separate point and
+## interval estimators did.
+const nbe_probs = [0.025, 0.5, 0.975]
+quantile_rows(q, r) = q isa AbstractVector ? q[r] : q[r, :]
+function nbe_view(estimator, ci::Bool)
+    return function (Z)
+        q = estimator(Z)
+        n = size(q, 1) ÷ 3
+        ci ? vcat(quantile_rows(q, 1:n), quantile_rows(q, (2n + 1):3n)) : quantile_rows(q, (n + 1):2n)
     end
+end
+
+function load_model_nbe(n_lists, width, n_hidden, train_size, censoring_lower, censoring_upper, m, models_path)
+    load_model_nbe(n_lists, width, n_hidden, train_size, censoring_lower, censoring_upper, m, models_path, false)
 end
 
 function load_model_npe(n_lists, width, n_hidden, train_size, censoring_lower, censoring_upper, m, models_path; encoding_dim = 128)
@@ -327,29 +341,16 @@ function load_model_npe(n_lists, width, n_hidden, train_size, censoring_lower, c
 end
 
 function load_model_nbe(n_lists, width, n_hidden, train_size, censoring_lower, censoring_upper, m, models_path, ci::Bool)
-    if !ci
-        load_model_nbe(n_lists, width, n_hidden, train_size, censoring_lower, censoring_upper, m, models_path)
-    else
-        mdl_str = "model_ci_$(n_lists)_$(width)_$(n_hidden)_$(train_size)_$(censoring_lower)_$(censoring_upper)_$m.bson"
-        if isfile(joinpath(models_path, mdl_str))
-            model = BSON.load(joinpath(models_path, mdl_str))
-            return model[:ci_estimator]
-        else
-            error("Model file $(mdl_str) not found in $(models_path).")
-        end
-    end 
+    mdl_str = "model_$(n_lists)_$(width)_$(n_hidden)_$(train_size)_$(censoring_lower)_$(censoring_upper)_$m.bson"
+    return load_model_nbe(ci ? "ci_" * mdl_str : mdl_str, models_path)
 end
 
+## Accepts the old interval filename (model_ci_...) for the bounds and the model filename for the median
 function load_model_nbe(mdl_str, models_path)
-    if isfile(joinpath(models_path, mdl_str))
-        model = BSON.load(joinpath(models_path, mdl_str))
-        if occursin("ci_", mdl_str)
-            return model[:ci_estimator]
-        end
-        return model[:estimator]
-    else
-        error("Model file $(mdl_str) not found in $(models_path).")
-    end
+    ci = occursin("ci_", mdl_str)
+    file = joinpath(models_path, replace(mdl_str, "ci_" => ""))
+    isfile(file) || error("Model file $(basename(file)) not found in $(models_path).")
+    return nbe_view(BSON.load(file)[:estimator], ci)
 end
 
 function load_model_nbe(; 

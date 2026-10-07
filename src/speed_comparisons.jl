@@ -6,9 +6,9 @@ addprocs(SlurmManager(); exeflags=["--threads", "1", "--project"])
 @everywhere include("mse_functions.jl")
 @everywhere include("mcmc_functions.jl")
 
-@everywhere function get_nbe_estimates(nbe_model, nbe_model_ci, test_data, slice_idx)
+## One forward pass of the joint NBE gives the median and the 95% interval
+@everywhere function get_nbe_estimates(nbe_model, test_data, slice_idx)
     nbe_model(test_data[:, slice_idx])
-    nbe_model_ci(test_data[:, slice_idx])
 end
 
 @everywhere function time_function(fn, args)
@@ -90,28 +90,7 @@ end
         npe_models_path
     )
 
-    nbe_model = load_model_nbe(
-        5,
-        256,
-        3,
-        train_size_default,
-        0,
-        10,
-        1,
-        nbe_models_path
-    )
-
-    nbe_model_ci = load_model_nbe(
-        5,
-        256,
-        3,
-        train_size_default,
-        0,
-        10,
-        1,
-        nbe_models_path,
-        true
-    )
+    nbe_model = BSON.load(joinpath(nbe_models_path, "model_5_256_3_$(train_size_default)_0_10_1.bson"))[:estimator]
 
     out = DataFrame(
         dataset = Int64[],
@@ -121,10 +100,10 @@ end
     )
 
     ## warm up first
-    nbe_time = time_function(get_nbe_estimates, (nbe_model, nbe_model_ci, test_data, slice_idx))
+    nbe_time = time_function(get_nbe_estimates, (nbe_model, test_data, slice_idx))
     
     for _ in 1:n_runs
-        nbe_time = time_function(get_nbe_estimates, (nbe_model, nbe_model_ci, test_data, slice_idx))
+        nbe_time = time_function(get_nbe_estimates, (nbe_model, test_data, slice_idx))
         push!(out, (
             dataset = slice_idx,
             method = "NBE",
