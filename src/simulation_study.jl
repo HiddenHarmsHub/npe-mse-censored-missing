@@ -68,6 +68,8 @@ end
     npe_estimates = map(eachcol(test_data)) do x
         boundedposteriorquantile(model_npe, reshape(x, :, 1), [0.025, 0.5, 0.975], 5000, 1.0, 10.0)[1, :]
     end |> x -> hcat(x...)
+    n_failed = sum(isnan, npe_estimates[2, :])
+    n_failed > 0 && println("NPE $model_file: no posterior draws inside the intercept prior support for $n_failed datasets")
 
 
     APE_NBE = abs.((estimated_pars_nbe .- test_pars) ./ test_pars)

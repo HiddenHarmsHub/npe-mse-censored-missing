@@ -499,11 +499,22 @@ function boundedsampleposterior(
     lower::Real,
     upper::Real;
     param_idx::Integer = 1,
+    max_rounds::Integer = 20,
     kwargs...
 )
-    samples = sampleposterior(estimator, Z, N; kwargs...)
-    mask = (samples[param_idx, :] .>= lower) .& (samples[param_idx, :] .<= upper)
-    return samples[:, mask]
+    ## Rejection sampling from the approximate posterior truncated to the prior support: draw in rounds of
+    ## N until N draws are accepted or max_rounds is reached (fewer, possibly none, are then returned)
+    accepted = Matrix{Float32}[]
+    n_accepted = 0
+    for _ in 1:max_rounds
+        samples = sampleposterior(estimator, Z, N; kwargs...)
+        keep = samples[:, (samples[param_idx, :] .>= lower) .& (samples[param_idx, :] .<= upper)]
+        push!(accepted, keep)
+        n_accepted += size(keep, 2)
+        n_accepted >= N && break
+    end
+    samples = reduce(hcat, accepted)
+    return samples[:, 1:min(N, size(samples, 2))]
 end
 
 function boundedposteriorquantile(
@@ -517,6 +528,8 @@ function boundedposteriorquantile(
     kwargs...
 )
     samples = boundedsampleposterior(estimator, Z, N, lower, upper; param_idx=param_idx, kwargs...)
+    ## No draw inside the prior support: the approximation has failed for this dataset
+    isempty(samples) && return fill(NaN32, size(samples, 1), length(probs))
     return posteriorquantile(samples, probs)
 end
 
