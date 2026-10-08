@@ -169,5 +169,13 @@ pmap(
     on_error = e -> (println("Training task failed: ", sprint(showerror, e)); nothing)
 )
 
-println("Finished training. Models still missing are retrained by resubmitting this job.")
+## Fail the job if any model is missing, so that jobs depending on it (afterok) do not start
+all_models = filter(model -> model[5] <= model[6], unique(vcat(grid_lists, grid_neurons, grid_censoring, grid_hidden, grid_4, grid_5, grid_6)))
+missing_nbe = filter(model -> !isfile(joinpath(output_path_nbe, "model_$(join(model, "_")).bson")), all_models)
+missing_npe = filter(model -> !isfile(joinpath(output_path_npe, "model_$(model[1])_$(model[2])_$(model[3])_$(encoding_dim)_$(model[4])_$(model[5])_$(model[6])_$(model[7]).bson")), all_models)
+if !isempty(missing_nbe) || !isempty(missing_npe)
+    println("Missing $(length(missing_nbe)) NBE and $(length(missing_npe)) NPE models; resubmit this job to train them.")
+    exit(1)
+end
+println("Finished training all models.")
 

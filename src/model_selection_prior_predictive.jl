@@ -56,7 +56,7 @@ real_data = Dict(
 
 domain_flag(p) = 0.025 <= p <= 0.975 ? "within" : (0.005 <= p <= 0.995 ? "near boundary" : "outside")
 
-quantile_rows, domain_rows = NamedTuple[], NamedTuple[]
+quantile_table, domain_rows = NamedTuple[], NamedTuple[]
 for s in ["A", "B"]
     system = model_selection_systems[s]
     Random.seed!(s == "A" ? 101 : 102)
@@ -70,7 +70,7 @@ for s in ["A", "B"]
     for col in names(summaries)
         x = filter(isfinite, Float64.(summaries[!, col]))
         q = quantile(x, [0.025, 0.25, 0.5, 0.75, 0.975])
-        push!(quantile_rows, (system = s, summary = col, q025 = q[1], q25 = q[2], median = q[3], q75 = q[4], q975 = q[5]))
+        push!(quantile_table, (system = s, summary = col, q025 = q[1], q25 = q[2], median = q[3], q75 = q[4], q975 = q[5]))
     end
 
     observed = data_summaries(real_data[s].counts, system.K)
@@ -101,6 +101,6 @@ for s in ["A", "B"]
         println("No trained classifier for system $s; skipping the embedding check.")
     end
 end
-CSV.write(joinpath(output_path, "prior_predictive_quantiles.csv"), DataFrame(quantile_rows))
+CSV.write(joinpath(output_path, "prior_predictive_quantiles.csv"), DataFrame(quantile_table))
 CSV.write(joinpath(output_path, "domain_checks.csv"), DataFrame(domain_rows))
 println(DataFrame(domain_rows))
