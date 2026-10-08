@@ -1,6 +1,12 @@
+## Timing of inference and training, run as two jobs:
+##   julia --project src/speed_comparisons.jl inference      (Slurm workers, one thread each; slurm/speed_inference.sbatch)
+##   julia --project -t 8 src/speed_comparisons.jl training  (one multi-threaded process, as in training; slurm/speed_training.sbatch)
+## The cost of a validated MCMC posterior is the time-to-validated-fit that mcmc_simulation_study.jl records for
+## every benchmark dataset; the NUTS sweep here only shows how its cost scales with the number of iterations.
 using Pkg; Pkg.activate(".")
 using Distributed, SlurmClusterManager
-addprocs(SlurmManager(); exeflags=["--threads", "1", "--project"])
+part = isempty(ARGS) ? "inference" : ARGS[1]
+part == "inference" && addprocs(SlurmManager(); exeflags=["--threads", "1", "--project"])
 
 @everywhere using Random
 @everywhere include("mse_functions.jl")
@@ -51,14 +57,10 @@ end
         training_settings...
     )
 
-    train_nbe() ## warmup
-    train_npe_fixed() ## warmup
-    n_runs = 3  # each run is several hours at the full training budget
+    ## One run each: a run takes hours, so compilation is a negligible part of it
     train_df = DataFrame()
-    for _ in 1:n_runs
-        push!(train_df, (method = "NBE", train_time = time_function(train_nbe, ())))
-        push!(train_df, (method = "NPE", train_time = time_function(train_npe_fixed, ())))
-    end
+    push!(train_df, (method = "NBE", train_time = time_function(train_nbe, ()), threads = Threads.nthreads()))
+    push!(train_df, (method = "NPE", train_time = time_function(train_npe_fixed, ()), threads = Threads.nthreads()))
     mkpath(joinpath("output", "speed_comparisons"))
     CSV.write(
         joinpath("output", "speed_comparisons", "train_time_comparison.csv"),
@@ -113,21 +115,31 @@ end
     end
 
     iterations_list = 1000 * 2 .^ collect(0:5)
+    ## NUTS with the remediated settings that produced most validated reference fits (stage 1), on a shorter sweep
+    mcmc_iterations = 1000 * 2 .^ collect(0:3)
+    n_runs_mcmc = 3
+    stage = nuts_stages[2]
 
     for (i, num_iterations) in enumerate(iterations_list)
-        println("Benchmarking MCMC with $num_iterations iterations...")
-        run_mcmc(slice_idx) = fit_nuts(test_counts[:, slice_idx], X, censoring_lower = 0, censoring_upper = 10, n_samples = num_iterations, n_chains = 4)
-        
-        i == 1 && time_function(run_mcmc, slice_idx) ## warmup
+        if num_iterations in mcmc_iterations
+            println("Benchmarking MCMC with $num_iterations iterations...")
+            run_mcmc(slice_idx) = fit_nuts(
+                test_counts[:, slice_idx], X; censoring_lower = 0, censoring_upper = 10,
+                n_adapts = stage.n_adapts, n_samples = num_iterations, n_chains = 4, δ = stage.δ,
+                max_depth = stage.max_depth, metric = stage.metric, parameterisation = stage.parameterisation
+            )
 
-        for _ in 1:n_runs
-            mcmc_time = time_function(run_mcmc, slice_idx)        
-            push!(out, (
-                dataset = slice_idx,
-                method = "MCMC",
-                iterations = num_iterations,
-                time = mcmc_time
-            ))
+            i == 1 && time_function(run_mcmc, slice_idx) ## warmup
+
+            for _ in 1:n_runs_mcmc
+                mcmc_time = time_function(run_mcmc, slice_idx)
+                push!(out, (
+                    dataset = slice_idx,
+                    method = "MCMC",
+                    iterations = num_iterations,
+                    time = mcmc_time
+                ))
+            end
         end
 
         run_npe(slice_idx) = sampleposterior(npe_model, reshape(test_data[:, slice_idx], :, 1), num_iterations)
@@ -154,6 +166,8 @@ end
 
 
 
+if part == "inference"
+
 test_data, test_pars = load_test_data(joinpath("output", "test_data"), 5, 0, 10)
 
 
@@ -173,7 +187,8 @@ end
 
 pmap(run_speed_comparison, datasets_to_sample)
 
-
-## also run train time comparison
-
-train_time_comparison()
+elseif part == "training"
+    train_time_comparison()
+else
+    error("Unknown part $part; use inference or training.")
+end
