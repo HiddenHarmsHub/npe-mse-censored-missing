@@ -10,7 +10,6 @@ include("model_selection_reference.jl")
 using Optim
 
 run = model_selection_run()
-replicates = ensemble_replicates
 n_draws = 20_000
 n_decomposition_draws = 1000
 decomposition_mass = 0.999
@@ -51,7 +50,7 @@ for s in ["A", "B"]
 
     ## ---- Structure posteriors: neural (ensemble, every replicate, every prior) and reference ----
     classifiers = load_classifier(config, 0)
-    π_neural = Dict(rep => model_probabilities(classifiers[rep], y) for rep in replicates)
+    π_neural = Dict(rep => model_probabilities(classifiers[i], y) for (i, rep) in enumerate(classifier_replicates(config)))
     π_ensemble = model_probabilities(classifiers, y)
     π_prior = Dict(name => reweight_model_probs(π_ensemble, primary, prior, K) for (name, prior) in all_priors)
     println("System $s: enumerating reference evidences for $(n_models(K)) structures")
@@ -65,7 +64,7 @@ for s in ["A", "B"]
         probs[!, "neural_$name"] = π
         probs[!, "reference_$name"] = reference[name].π
     end
-    for rep in replicates
+    for rep in classifier_replicates(config)
         probs[!, "neural_primary_rep$rep"] = π_neural[rep]
     end
     CSV.write(joinpath(output_path, "$(s)_model_probabilities.csv"), sort(probs, :neural_primary, rev = true))
@@ -75,7 +74,7 @@ for s in ["A", "B"]
     inclusion_rows, size_rows = NamedTuple[], NamedTuple[]
     ## neural_* without a replicate suffix is the ensemble
     for (label, π) in vcat([("neural_$n", p) for (n, p) in π_prior], [("reference_$n", r.π) for (n, r) in reference],
-                           [("neural_primary_rep$rep", π_neural[rep]) for rep in replicates])
+                           [("neural_primary_rep$rep", π_neural[rep]) for rep in classifier_replicates(config)])
         append!(inclusion_rows, [(method = label, pair = p, prob = v) for (p, v) in zip(pair_names, masks * π)])
         append!(size_rows, [(method = label, size = k, prob = sum(π[sizes .== k])) for k in 0:J])
     end
@@ -84,11 +83,18 @@ for s in ["A", "B"]
 
     ## ---- Population size: model averaged and conditional ----
     cnpe_ensemble = load_cnpe(config, 0)
+    if config.cnpe_combination == :best
+        selection = cnpe_validation_losses(config)
+        selection.selected = selection.rep .== best_cnpe_replicate(config)
+        CSV.write(joinpath(output_path, "$(s)_cnpe_selection.csv"), selection)
+        println("System $s: conditional NPE replicate $(selection.rep[selection.selected][1]) selected by validation loss")
+    end
     rows = NamedTuple[]
     bma = sample_model_averaged_posterior(cnpe_ensemble, y, π_ensemble, n_draws, system; counts_obs)
     append!(rows, population_rows("neural_bma", bma))
-    for rep in replicates
-        append!(rows, population_rows("neural_bma_rep$rep", sample_model_averaged_posterior(cnpe_ensemble[rep], y, π_neural[rep], n_draws, system; counts_obs)))
+    ## Each replicate pair on its own (classifier r with conditional NPE r)
+    for rep in paired_replicates(config)
+        append!(rows, population_rows("neural_bma_rep$rep", sample_model_averaged_posterior(load_cnpe(config, rep), y, π_neural[rep], n_draws, system; counts_obs)))
     end
     for (name, _) in sensitivity_model_priors
         append!(rows, population_rows("neural_bma_$name", sample_model_averaged_posterior(cnpe_ensemble, y, π_prior[name], n_draws, system; counts_obs)))

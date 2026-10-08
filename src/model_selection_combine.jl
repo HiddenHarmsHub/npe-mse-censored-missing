@@ -113,7 +113,7 @@ if isdir(reference_path) && !isempty(readdir(reference_path))
         system = model_selection_systems[s]
         K = system.K
         config = model_selection_config(system, run)
-        neural_rep = all(r -> isfile(joinpath(models_path(config), classifier_filename(config, r))), ensemble_replicates) ? 0 : 1
+        neural_rep = all(r -> isfile(joinpath(models_path(config), classifier_filename(config, r))), classifier_replicates(config)) ? 0 : 1
         classifier = load_classifier(config, neural_rep)
         test = BSON.load(model_selection_test_file(run, system))
         masks = enumerate_models(K)

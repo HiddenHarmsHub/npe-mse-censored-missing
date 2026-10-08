@@ -142,7 +142,10 @@ const retraining_settings = (
 
 ## Each named run fixes the coefficient priors and the training settings and has its own folders,
 ## so runs never overwrite each other. Scripts pick a run with the MS_RUN environment variable.
-## `label` names the run in comparison tables and figures.
+## `label` names the run in comparison tables and figures. `n_classifiers` and `n_cnpe` (default 3 each) set
+## how many independently trained replicates of each network the run has. The ensemble (rep 0) averages all
+## classifiers; for the conditional NPE it either mixes all replicates (`cnpe_combination = :mixture`, the
+## default) or uses the one replicate with the lowest best validation loss (`:best`).
 ## A classifier `width` of `nothing` keeps the frozen base width; K_val = nothing keeps the default K ÷ 5 + 1.
 const model_selection_runs = Dict(
     ## Original run: β, γ ~ N(0, 4²); NeuralEstimators defaults (Adam 5e-4, early stopping after 10 epochs)
@@ -159,9 +162,16 @@ const model_selection_runs = Dict(
     ## so the same settings with a three times (conditional NPE) and two times (classifier) longer schedule,
     ## trained from scratch. Warm restarts from b4_g4r were tried and rejected: with a fresh Adam state even
     ## a peak learning rate of 3e-6 pushed a converged flow off its optimum.
+    ## Ensemble of 10 classifiers (averaging consistently sharpened the structure probabilities) with a single
+    ## conditional NPE, the replicate with the lowest validation loss (mixing flows mostly widened the
+    ## population intervals beyond nominal)
     "b4_g4x" => (run = "b4_g4x", label = "N(0, 4²), extended training", beta_mean = 0, beta_sd = 4, gamma_sd = 4,
+        n_classifiers = 10, n_cnpe = 3, cnpe_combination = :best,
         classifier = merge(retraining_settings.classifier, (epochs = 800, stopping_epochs = 100)),
-        cnpe = merge(retraining_settings.cnpe, (epochs = 600, stopping_epochs = 100))),
+        ## Patience equals the schedule for the conditional NPE: its loss plateaus while the learning rate is high
+        ## and only falls as the cosine schedule anneals, and patience 100 stopped two five-list replicates on the
+        ## plateau (epochs 257 and 196). No early stopping; the best epoch is still kept.
+        cnpe = merge(retraining_settings.cnpe, (epochs = 600, stopping_epochs = 600))),
 )
 model_selection_run(name = get(ENV, "MS_RUN", "b4_g4")) = model_selection_runs[name]
 
@@ -179,7 +189,8 @@ function model_selection_config(system, run = model_selection_run(); selected_pa
     selected = CSV.read(selected_path, DataFrame)
     row = only(eachrow(filter(r -> r.n_lists == system.K && r.censoring_lower == system.censoring_lower && r.censoring_upper == system.censoring_upper, selected)))
     classifier = merge(run.classifier, (width = get(run.classifier.width, system.system, row.width),))
-    return (; system..., width = row.width, n_hidden = row.n_hidden, encoding_dim, a, b, run.run, run.beta_mean, run.beta_sd, run.gamma_sd, classifier, run.cnpe)
+    return (; system..., width = row.width, n_hidden = row.n_hidden, encoding_dim, a, b, run.run, run.beta_mean, run.beta_sd, run.gamma_sd, classifier, run.cnpe,
+            n_classifiers = get(run, :n_classifiers, 3), n_cnpe = get(run, :n_cnpe, 3), cnpe_combination = get(run, :cnpe_combination, :mixture))
 end
 
 ## The β prior is not in the names; it is fixed by the run's folder
@@ -250,10 +261,30 @@ function load_model_selection_estimator(filename, path)
     isfile(file) || error("Model file $filename not found in $path.")
     return BSON.load(file)[:estimator]
 end
-## rep = 0 is the ensemble of replicates 1-3
-const ensemble_replicates = 1:3
-load_classifier(config, rep) = rep == 0 ? [load_classifier(config, r) for r in ensemble_replicates] : load_model_selection_estimator(classifier_filename(config, rep), models_path(config))
-load_cnpe(config, rep) = rep == 0 ? [load_cnpe(config, r) for r in ensemble_replicates] : load_model_selection_estimator(cnpe_filename(config, rep), models_path(config))
+## The run's replicates of each network; rep = 0 loads the ensemble: every classifier, and for the conditional
+## NPE either every replicate or the selected one (see cnpe_combination)
+classifier_replicates(config) = 1:config.n_classifiers
+cnpe_replicates(config) = 1:config.n_cnpe
+## Replicates with both networks, which can be evaluated on their own
+paired_replicates(config) = 1:min(config.n_classifiers, config.n_cnpe)
+load_classifier(config, rep) = rep == 0 ? [load_classifier(config, r) for r in classifier_replicates(config)] : load_model_selection_estimator(classifier_filename(config, rep), models_path(config))
+function load_cnpe(config, rep)
+    rep == 0 || return load_model_selection_estimator(cnpe_filename(config, rep), models_path(config))
+    config.cnpe_combination == :best && return load_cnpe(config, best_cnpe_replicate(config))
+    config.n_cnpe == 1 && return load_cnpe(config, 1)
+    return [load_cnpe(config, r) for r in cnpe_replicates(config)]
+end
+
+## Best (minimum over epochs) validation loss of each conditional NPE replicate, from its training log.
+## Each replicate has its own 50,000-dataset validation set, simulated from the same prior.
+function cnpe_validation_losses(config; path = models_path(config))
+    map(cnpe_replicates(config)) do rep
+        log = joinpath(path, "logs", replace(cnpe_filename(config, rep), ".bson" => ""), "loss_per_epoch.csv")
+        isfile(log) || error("No training log for conditional NPE replicate $rep ($log); cannot select the best replicate.")
+        (rep = rep, best_validation = minimum(CSV.read(log, DataFrame; header = false)[!, 2]))
+    end |> DataFrame
+end
+best_cnpe_replicate(config; kwargs...) = (v = cnpe_validation_losses(config; kwargs...); v.rep[argmin(v.best_validation)])
 
 ## ---- Inference ----
 
