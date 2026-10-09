@@ -589,11 +589,13 @@ ggsave(
     width = 10, height = 24, dpi = 300
 )
 
-## Trace plots for the worst and a random sample of validated NUTS fits
+## Trace plots for the worst and a random sample of validated NUTS fits, excluding datasets that hit the
+## simulator cap (their posteriors pile up at the intercept bound and they are excluded from calibration)
 set.seed(1)
+uncapped_diagnostics <- mcmc_diagnostics_df %>% filter(!capped)
 trace_datasets <- c(
-    mcmc_diagnostics_df %>% slice_max(max_rhat, n = 3) %>% pull(dataset),
-    mcmc_diagnostics_df %>% filter(status != "failed") %>% slice_sample(n = 3) %>% pull(dataset)
+    uncapped_diagnostics %>% slice_max(max_rhat, n = 3) %>% pull(dataset),
+    uncapped_diagnostics %>% filter(status != "failed") %>% slice_sample(n = 3) %>% pull(dataset)
 )
 
 trace_plot <- lapply(trace_datasets, function(idx) {
@@ -609,7 +611,8 @@ trace_plot <- lapply(trace_datasets, function(idx) {
     mutate(label = paste0("dataset ", dataset, " (", status, ")")) %>%
     ggplot(aes(x = iteration, y = intercept, col = factor(chain))) +
     geom_line(alpha = 0.6) +
-    facet_wrap(~label, scales = "free_y") +
+    facet_wrap(~label, scales = "free") +
+    scale_y_continuous(labels = function(x) signif(x, 6)) +
     labs(x = "Iteration", y = expression(alpha), col = "Chain") +
     theme_minimal(base_size = 12) +
     theme(panel.grid.minor = element_blank(), legend.position = "top")

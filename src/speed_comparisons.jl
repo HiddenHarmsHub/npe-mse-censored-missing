@@ -171,12 +171,14 @@ if part == "inference"
 test_data, test_pars = load_test_data(joinpath("output", "test_data"), 5, 0, 10)
 
 
+## Datasets that hit the simulator cap are not draws from the model (and are excluded from calibration);
+## NUTS cannot fit them sensibly, so they are skipped here as well
 Random.seed!(42)
 n_datasets_to_sample = 100
 datasets_to_sample = Int64[]
 while length(datasets_to_sample) < n_datasets_to_sample
     candidate = rand(1:size(test_data, 2))
-    if !(candidate in datasets_to_sample)
+    if !(candidate in datasets_to_sample) && !is_capped(Float64.(test_pars[:, candidate]))
         push!(datasets_to_sample, candidate)
     end
 end
