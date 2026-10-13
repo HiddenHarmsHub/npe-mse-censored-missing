@@ -133,9 +133,12 @@ comparison_dir <- file.path("output", "model_selection_comparison")
 ## Up to four runs: fixed hue order, plus a shape per run because two of the hues are low-contrast
 prior_colours <- c("#2a78d6", "#eb6834", "#1baf7a", "#eda100")
 prior_shapes <- c(16, 17, 15, 18)
+## The original-training run is superseded by the retrained and extended N(0,4²) runs; it stays in the tables
+## but is left out of these figures, which take at most four runs
+superseded <- "N(0, 4²), original training"
 if (file.exists(file.path(comparison_dir, "real_data_population.csv"))) {
     totals <- read_csv(file.path(comparison_dir, "real_data_population.csv"), show_col_types = FALSE) |>
-        filter(quantity == "N", method %in% c("neural_bma", "reference_bma")) |>
+        filter(quantity == "N", method %in% c("neural_bma", "reference_bma"), prior != superseded) |>
         mutate(system = factor(real_labels[system], levels = real_labels),
                method = factor(c(neural_bma = "Neural model average", reference_bma = "Reference (enumeration)")[method],
                                levels = c("Neural model average", "Reference (enumeration)")),
@@ -150,7 +153,7 @@ if (file.exists(file.path(comparison_dir, "real_data_population.csv"))) {
     ggsave(file.path(figures_dir, "model_selection_prior_comparison_population.png"), p, width = 9, height = 4, dpi = 300)
 
     inclusion <- read_csv(file.path(comparison_dir, "real_data_inclusion.csv"), show_col_types = FALSE, col_types = cols(pair = col_character())) |>
-        filter(method %in% c("neural_primary", "reference_primary")) |>
+        filter(method %in% c("neural_primary", "reference_primary"), prior != superseded) |>
         mutate(system = factor(real_labels[system], levels = real_labels),
                source = factor(c(neural_primary = "Neural", reference_primary = "Reference")[method], levels = c("Neural", "Reference")),
                prior = fct_inorder(prior), pair = paste0("γ[", pair, "]"))

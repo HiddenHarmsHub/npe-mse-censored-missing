@@ -623,12 +623,9 @@ ggsave(
 )
 
 ## speed benchmarking
-benchmark_files <- list.files(
-    path = file.path("output", "speed_comparisons"), 
-    pattern = "*.csv", 
-    full.names = TRUE
-) %>%
-    .[!grepl("train_time_comparison", .)]
+## Only the datasets selected by speed_comparisons.jl (datasets.csv); the folder may hold timings of others
+speed_datasets <- read_csv(file.path("output", "speed_comparisons", "datasets.csv"), show_col_types = FALSE)$dataset
+benchmark_files <- file.path("output", "speed_comparisons", paste0("speed_comparison_dataset_", speed_datasets, ".csv"))
 
 benchmark_df <- lapply(benchmark_files, function(benchmark_file) {
     benchmark_df <- read_csv(benchmark_file, show_col_types = FALSE)

@@ -183,6 +183,9 @@ while length(datasets_to_sample) < n_datasets_to_sample
     end
 end
 savepath = joinpath("output", "speed_comparisons")
+## The selection is written out so the analysis uses only these datasets (the folder may hold others)
+mkpath(savepath)
+CSV.write(joinpath(savepath, "datasets.csv"), DataFrame(dataset = sort(datasets_to_sample)))
 datasets_to_sample = filter(datasets_to_sample) do idx
     !isfile(joinpath(savepath, "speed_comparison_dataset_$(idx).csv"))
 end

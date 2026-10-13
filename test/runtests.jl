@@ -268,9 +268,22 @@ end
     ## The extended N(0, 4²) run: same priors and settings as b4_g4r but a longer schedule, in its own folders
     ax = model_selection_config(model_selection_systems["A"], model_selection_runs["b4_g4x"]; selected_path = selected)
     @test original_priors(model_selection_runs["b4_g4x"])
-    @test ax.classifier.epochs == 800 && ax.cnpe.epochs == 600 && ax.cnpe.stopping_epochs == 100
+    @test ax.classifier.epochs == 800 && ax.cnpe.epochs == 600 && ax.cnpe.stopping_epochs == 600
     @test ax.classifier.width == 256 && ax.cnpe.lr == model_selection_runs["b4_g4r"].cnpe.lr
     @test models_path(ax) == joinpath("output", "models_model_selection_b4_g4x")
+    ## Replicates: 10 classifiers and the best of 3 conditional NPEs for b4_g4x; 3 and a mixture of 3 by default
+    @test classifier_replicates(ax) == 1:10 && cnpe_replicates(ax) == 1:3 && paired_replicates(ax) == 1:3
+    @test ax.cnpe_combination == :best && a1.cnpe_combination == :mixture && classifier_replicates(a1) == 1:3
+    ## The best conditional NPE is the replicate whose training log reaches the lowest validation loss
+    logdir = mktempdir()
+    for (rep, losses) in [(1, [30.0, 5.0, 1.2]), (2, [29.0, 4.0, -0.7, 0.3]), (3, [28.0, 9.0])]
+        d = joinpath(logdir, "logs", replace(cnpe_filename(ax, rep), ".bson" => ""))
+        mkpath(d)
+        CSV.write(joinpath(d, "loss_per_epoch.csv"), DataFrame(train = losses, val = losses); writeheader = false)
+    end
+    @test best_cnpe_replicate(ax; path = logdir) == 2
+    @test cnpe_validation_losses(ax; path = logdir).best_validation == [1.2, -0.7, 9.0]
+    @test_throws ErrorException best_cnpe_replicate(ax; path = mktempdir())
     ## Training options: clipping chains Adam after ClipNorm and NeuralEstimators can read its learning rate
     est = PointEstimator(Chain(Dense(3, 4), Dense(4, 2)))
     opts = training_options(a1.cnpe, est)
