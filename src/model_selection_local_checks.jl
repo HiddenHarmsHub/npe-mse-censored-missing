@@ -123,6 +123,11 @@ for s in ["A", "B"]
     end
 end
 
+## Runs that mix several conditional NPEs are skipped for both systems
+if isempty(real_rows)
+    println("No local checks for this run (it does not use a single conditional NPE); nothing written.")
+    exit(0)
+end
 real = DataFrame(real_rows)
 CSV.write(joinpath(output_path, "real_data_neural_vs_exact.csv"), real)
 sim = DataFrame(sim_rows)
