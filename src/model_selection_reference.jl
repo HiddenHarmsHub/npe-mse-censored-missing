@@ -1,7 +1,7 @@
 ## Reference posterior model probabilities by enumerating every interaction structure and
 ## estimating each marginal likelihood p(y | m) by importance sampling around the Laplace mode.
 ## Include after mse_functions.jl, mcmc_functions.jl and model_selection_functions.jl.
-using Optim
+import Optim
 
 ## Log marginal likelihood of structure `mask`, integrating over the active parameters only.
 ## The data-only constants dropped by likelihood_censored are the same for every structure, so
