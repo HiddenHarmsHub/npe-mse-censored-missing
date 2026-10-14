@@ -84,20 +84,23 @@ if (file.exists(strength_file)) {
 }
 
 ## ---- Conditional NPE parameter calibration (SBC ranks given the true structure) ----
-## ECDF of the ranks minus the uniform CDF, with the 95% Kolmogorov–Smirnov band, for the selected replicate
+## ECDF of the ranks minus the uniform CDF, with the 95% Kolmogorov–Smirnov band: the selected replicate, or
+## one line per replicate for runs that mix the conditional NPEs (no replicate is selected)
 ranks_file <- file.path(input_dir, "parameter_calibration_ranks.csv")
 if (file.exists(ranks_file)) {
-    ranks <- read_csv(ranks_file, show_col_types = FALSE) |> filter(selected)
+    ranks <- read_csv(ranks_file, show_col_types = FALSE)
+    if (any(ranks$selected)) ranks <- filter(ranks, selected)
     grid <- seq(0, 1, length.out = 101)
     role_labels <- c(alpha = "α", beta = "β (main effects)", `gamma active` = "γ, active interactions", `gamma inactive` = "γ, inactive interactions")
     ecdf_diff <- ranks |>
-        group_by(system, role) |>
+        group_by(system, role, rep) |>
         reframe(u = grid, diff = ecdf(rank)(grid) - grid, band = 1.358 / sqrt(n())) |>
-        mutate(system = system_labels[system], role = factor(role_labels[role], levels = role_labels))
+        mutate(system = system_labels[system], role = factor(role_labels[role], levels = role_labels), rep = factor(rep))
     p <- ggplot(ecdf_diff, aes(u, diff)) +
-        geom_ribbon(aes(ymin = -band, ymax = band), fill = "grey85") +
+        geom_ribbon(aes(ymin = -band, ymax = band, group = rep), fill = "grey85") +
         geom_hline(yintercept = 0, colour = "grey50") +
-        geom_line(colour = "#2a78d6", linewidth = 0.7) +
+        geom_line(aes(colour = rep), linewidth = 0.7) +
+        scale_colour_manual(values = c("#2a78d6", "#d95f02", "#1b9e77", "#7570b3"), name = "Replicate", guide = if (n_distinct(ecdf_diff$rep) > 1) "legend" else "none") +
         facet_grid(system ~ role, labeller = labeller(system = label_wrap_gen(18))) +
         scale_x_continuous(breaks = c(0, 0.5, 1), labels = c("0", "0.5", "1")) +
         labs(x = "Fractional rank of the true value", y = "ECDF minus uniform")
