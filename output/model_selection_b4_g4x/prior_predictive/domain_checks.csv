@@ -1,0 +1,24 @@
+system,data,check,observed,percentile,flag
+A,Silverman,total_exact,2744.0,0.085525,within
+A,Silverman,n_censored,0.0,0.5,within
+A,Silverman,n_zero,13.0,0.812775,within
+A,Silverman,singleton_share,0.9194606413994169,0.9869967491872969,near boundary
+A,Silverman,max_cell,995.0,0.0763,within
+A,Silverman,log_total,7.917536353943631,0.085525,within
+A,Silverman,list_1,94.0,0.07742500000000001,within
+A,Silverman,list_2,567.0,0.126475,within
+A,Silverman,list_3,1169.0,0.150575,within
+A,Silverman,list_4,807.0,0.14115,within
+A,Silverman,list_5,336.0,0.1116,within
+A,Silverman,embedding_nn_distance,1.9270384311676025,0.248,within
+B,King,total_exact,846.0,0.11185,within
+B,King,n_censored,6.0,0.9946,near boundary
+B,King,n_zero,0.0,0.196725,within
+B,King,singleton_share,0.8392434988179669,0.9124451837290186,within
+B,King,max_cell,584.0,0.11895,within
+B,King,log_total,6.741700694652055,0.11185,within
+B,King,list_1,163.0,0.151175,within
+B,King,list_2,38.0,0.106,within
+B,King,list_3,720.0,0.216075,within
+B,King,list_4,87.0,0.13267500000000002,within
+B,King,embedding_nn_distance,2.7721943855285645,0.432,within
