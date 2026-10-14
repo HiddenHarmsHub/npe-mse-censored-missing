@@ -1,6 +1,4 @@
-## Train the structure classifiers q(m | y) and conditional NPEs q(θ | y, m) for systems A and B,
-## on the architectures frozen by architecture_selection.jl, with independent replicates.
-## The run (priors and training settings) comes from MS_RUN; see model_selection_runs.
+## Train the structure classifiers and conditional NPEs for systems A and B
 using Pkg; Pkg.activate(".")
 using Distributed, SlurmClusterManager
 addprocs(SlurmManager(); exeflags=["--threads", "1", "--project"])

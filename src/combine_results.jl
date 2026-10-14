@@ -14,8 +14,7 @@ CSV.write(
 
 dataset_number(file) = parse(Int, match(r"\d+", file).match)
 
-## Reference-inference outputs are restricted to the stratified benchmark datasets; mcmc_summary/ and
-## mcmc_samples/ may still hold files from the original 10,000-dataset run in the old format
+## Reference-inference outputs are restricted to the stratified benchmark datasets
 benchmark_datasets = CSV.read(joinpath("output", "benchmark_datasets.csv"), DataFrame).dataset
 benchmark_files(path) = filter(file -> dataset_number(file) in benchmark_datasets, readdir(path))
 
@@ -91,7 +90,6 @@ CSV.write(
 )
 
 ## Fractional rank of the truth among the posterior draws for each benchmark dataset.
-## A central credible interval at level L contains the truth iff (1 - L) / 2 <= rank <= (1 + L) / 2.
 function sbc_ranks(method, samples_dir, samples_prefix, summary_dir, summary_prefix)
     rows = DataFrame[]
     for dataset in benchmark_datasets

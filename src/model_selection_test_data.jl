@@ -1,6 +1,4 @@
-## Fixed prior-predictive test sets for the model-selection systems, read by
-## model_selection_simulation.jl and model_selection_reference_study.jl.
-## Single process: MS_RUN=<run> julia --project src/model_selection_test_data.jl
+## Fixed prior-predictive test sets for the model-selection systems
 include("mse_functions.jl")
 include("model_selection_functions.jl")
 

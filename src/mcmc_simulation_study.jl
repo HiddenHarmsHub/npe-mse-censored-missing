@@ -1,5 +1,4 @@
-## Reference posteriors (NUTS with remediation, and IRLS-MH) for a stratified
-## subset of the K=5 test set, used to validate NBE and NPE
+## Reference posteriors (NUTS with remediation
 using Pkg; Pkg.activate(".")
 using Distributed, SlurmClusterManager
 addprocs(SlurmManager(); exeflags=["--threads", "1", "--project"])

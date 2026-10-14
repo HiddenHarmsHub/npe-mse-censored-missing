@@ -1,8 +1,4 @@
-## Model-averaged reanalysis of the Silverman (system A: K=5, uncensored) and King (system B: K=4,
-## cells in [1, 4] suppressed) data with the structure classifier and conditional NPE, compared with
-## conditional fits, the fixed-model NPE, reference model averaging by enumeration, and the MLE.
-## The primary neural results use the ensemble of the three replicates; each replicate is also reported.
-## Run locally: MS_RUN=<run> julia --project src/model_selection_real_data.jl
+## Model-averaged reanalysis of the Silverman (A) and King (B) data
 include("mse_functions.jl")
 include("mcmc_functions.jl")
 include("model_selection_functions.jl")
@@ -17,16 +13,7 @@ max_decomposition_models = 200
 n_reference_draws = 100_000
 n_ppc_draws = 4000
 
-## Interaction structures from the literature to fit conditionally, as lists of pairs such as "12".
-## UK lists: 1 LA (local authorities), 2 NG (NGOs), 3 PF (police forces and the NCA), 4 GO (government
-## organisations), 5 GP (general public); the counts match Table 1 of Silverman (2014) exactly.
-##   - Silverman (2014) / Bales et al. (2015), the Home Office analysis: stepwise AIC in Rcapture, keeping LA*NG,
-##     NG*GP, PF*GP, LA*PF, GO*GP, NG*GO; N = 11,313, 95% profile CI [9,918, 13,046].
-##   - Silverman (2020), Table 15: Bayesian fit with N(0, 1) interaction priors, thresholding at 2 (Table 10:
-##     median 13.2K, 95% 11.7K-15.1K) and at 5, which keeps only LA:NG (median 14.1K, 95% 12.6K-16.0K).
-## King: King, Rodriguez de Rivera Ortega and McCrea (2021, SIS book of short papers), Table 2: the structure selected
-##   by AIC and BIC under the interval-censored likelihood, N = 3,060, 95% bootstrap CI [1,583, 3,858]. Their BIC
-##   uses n = 15 cells (BIC_cells in the all-structures table).
+## Interaction structures from the literature, as lists of pairs such as "12"
 literature_models = Dict(
     "A" => Dict(
         "Home Office stepwise AIC (Silverman 2014)" => ["12", "13", "24", "25", "35", "45"],

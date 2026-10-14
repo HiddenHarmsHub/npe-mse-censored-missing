@@ -36,3 +36,7 @@ output/model_selection*/simulation_posteriors.csv
 output/model_selection*/simulation_models.csv
 output/model_selection*/reference_models.csv
 output/model_selection*/parameter_calibration_ranks.csv
+output/robustness/simulation/
+output/robustness/test_data/
+output/robustness/posteriors.csv
+output/models_robustness/*/logs/

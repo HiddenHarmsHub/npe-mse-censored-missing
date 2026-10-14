@@ -4,6 +4,7 @@ include(joinpath(@__DIR__, "..", "src", "mse_functions.jl"))
 include(joinpath(@__DIR__, "..", "src", "mcmc_functions.jl"))
 include(joinpath(@__DIR__, "..", "src", "model_selection_functions.jl"))
 include(joinpath(@__DIR__, "..", "src", "model_selection_reference.jl"))
+include(joinpath(@__DIR__, "..", "src", "robustness_functions.jl"))
 
 @testset "design matrix" begin
     X = one_hot_encode_parameters(3)
@@ -180,8 +181,7 @@ end
     @test sim.N == vec(sum(sim.counts, dims = 1)) .+ sim.N0
 end
 
-## Stub conditional NPEs for system B: the posterior ignores the data. StubNPE puts every draw inside the
-## intercept support; OutsideNPE puts the null structure's draws outside it (its mask is the input's tail).
+## Stub conditional NPEs for system B whose posterior ignores the data
 struct StubNPE end
 NeuralEstimators.sampleposterior(::StubNPE, Z, N::Integer; kw...) = vcat(fill(5f0, 1, N), randn(Float32, 10, N))
 struct OutsideNPE end
@@ -260,7 +260,7 @@ end
     @test b1.classifier.width == 64 && a1.width == 128
     @test models_path(a1) == joinpath("output", "models_model_selection_b1_g1")
     @test coefficient_priors(model_selection_runs["b1_g1"]).beta_dist == Normal(0, 1)
-    ## The retrained original priors: original priors (so the fixed-model NPE is compared), new settings, own folders
+    ## The retrained original priors
     r = model_selection_runs["b4_g4r"]
     @test original_priors(r) && r.cnpe == model_selection_runs["b1_g1"].cnpe
     @test model_selection_output_path(r) == joinpath("output", "model_selection_b4_g4r")
@@ -323,8 +323,7 @@ end
     check = log_evidence_check(y, Bool[1, 0, 1]; n_draws = 20_000)
     @test abs(check.laplace - check.pilot) < 0.05
 
-    ## A badly fitting structure for large counts pushes the mode to the intercept's lower bound,
-    ## where the logit-scale search used to produce NaN derivatives (test set A, dataset 8060)
+    ## A badly fitting structure for large counts pushes the mode to the intercept's lower bound
     y5 = [6598, 86541, 398, 22178, 1906391, 142, 160, 826365, 302974, 17493, 883781, 14776413, 0, 2412272, 250375, 16,
           89925, 6417, 0, 300897, 2519155, 7, 107888568, 9917693, 5, 0, 37014, 275683, 44, 1381, 26]
     X5 = one_hot_encode_parameters(5)[:, vcat(trues(6), model_mask(41, 5))]
@@ -360,4 +359,50 @@ end
     @test fit.AIC ≈ 2 * fit.n_parameters - 2 * fit.loglik
     @test fit.BIC_cells - fit.AIC ≈ (log(15) - 2) * fit.n_parameters
     @test abs(fit.N - 3060) < 10  # King et al. (2021), Table 2: 3,060 for {12, 13, 14, 23, 34}
+end
+
+@testset "robustness study" begin
+    Random.seed!(11)
+    layer = MonotoneQuantilesQ(3, 9, (1, 10))
+    q = reshape(layer(randn(Float32, 27, 4)), 3, 9, 4)
+    @test all(diff(q, dims = 2) .> 0)
+    @test all(1 .<= q[1, :, :] .<= 10)
+    old = MonotoneQuantiles(3, (1, 10))
+    x = randn(Float32, 9, 2)
+    @test MonotoneQuantilesQ(3, 3, (1, 10))(x) ≈ old(x)
+
+    K = 4
+    θ = vcat(5.0, 0.3 .* randn(K), 0.2 .* randn(binomial(K, 2)))
+    λ = exp.(one_hot_encode_parameters(K) * θ)
+    sims = [simulate_population(θ, K; δ = zeros(4)) for _ in 1:4000]
+    @test all(abs.(mean(first.(sims)) .- λ) .< 5 .* sqrt.(λ ./ 4000))
+    nb = [simulate_population(θ, K; r = 5.0)[1] for _ in 1:4000]
+    @test all(abs.(mean(nb) .- λ) .< 5 .* sqrt.((λ .+ λ .^ 2 ./ 5) ./ 4000))
+    @test var(getindex.(nb, 1)) > 2 * λ[1]
+    @test count(three_way_design(K)[:, 1]) == 2  # cells 123 and 1234
+
+    counts = [3, 0, 5, 2, 7, 1, 0, 4, 9, 0, 1, 0, 2, 0, 0]
+    @test apply_censoring(counts, K, 1, 4) == ifelse.(1 .<= counts .<= 4, -1, counts)
+    c2 = apply_censoring(counts, K, 1, 4; min_lists = 2)
+    @test c2[1:4] == counts[1:4] && c2[5] == 7 && c2[6] == -1
+    @test has_empty_overlap([5, 5, 5, 5, 0, 1, 1, 1, 1, 1, 0, 0, 1, 1, 0], K)
+    @test !has_empty_overlap(fill(1, 15), K)
+
+    system = model_selection_systems["B"]
+    scenarios = robustness_scenarios(system)
+    @test [s.name for s in scenarios] == ["S0", "S1", "S2", "S3", "S4a", "S4b", "S5", "S6", "S7", "S8a", "S8b", "M1a", "M1b", "M2a", "M2b", "C1", "C2"]
+    s7 = scenarios[findfirst(s -> s.name == "S7", scenarios)]
+    Random.seed!(3); a = simulate_scenario(s7, system, 5)
+    Random.seed!(3); b = simulate_scenario(s7, system, 5)
+    @test a.counts == b.counts && all(has_empty_overlap(c, K) for c in eachcol(a.counts))
+
+    draws = randn(20_000)
+    m = quantile_metrics(quantile(draws, robustness_probs), 0.3)
+    p = posterior_metrics(draws, 0.3)
+    @test keys(m) == keys(p)
+    @test isapprox(m.lower_95, p.lower_95; atol = 1e-8) && m.inside_50 == p.inside_50
+
+    @test mcse_prop(0.5, 100) ≈ 0.05
+    @test mcse_mean([1.0, 3.0]) ≈ 1 / sqrt(2) * sqrt(2)
+    @test rank_ks(collect(0.05:0.1:0.95)) ≈ 0.05
 end

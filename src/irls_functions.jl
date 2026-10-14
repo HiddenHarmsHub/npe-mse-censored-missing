@@ -1,5 +1,4 @@
-## Independent reference samplers for the log-linear Poisson model:
-## IRLS Metropolis-Hastings (Gamerman, 1997) and importance sampling around the MAP
+## Independent reference samplers for the log-linear Poisson model
 using LinearAlgebra, Random, ForwardDiff
 
 ## Draw each censored cell from Poisson(λ) truncated to [censoring_lower, censoring_upper]
@@ -15,7 +14,6 @@ function impute_censored(counts, η, censoring_lower, censoring_upper; rng = Ran
 end
 
 ## Gaussian proposal from one IRLS step at θ for complete counts y.
-## The Uniform intercept prior is replaced by a moment-matched Normal in the proposal only.
 function irls_proposal(θ, y, X, prior_mean, prior_prec)
     η = X * θ
     μ = exp.(η)
@@ -108,10 +106,7 @@ function weighted_quantile(x, w, p)
     return x[order][min(searchsortedfirst(cw, p), length(x))]
 end
 
-## Importance sampling from a multivariate t. By default it is the Laplace approximation; when pilot draws (e.g. from another sampler) are given their mean and covariance are used.
-## The proposal is built in Laplace-whitened coordinates z, θ = mode + L z, because posterior scales can span
-## more than 1/eps (counts near the simulator cap), which makes a covariance in θ numerically singular.
-## The weights use the exact posterior, so the proposal only affects efficiency.
+## Importance sampling from a multivariate t around the Laplace approximation (or fitted to pilot draws)
 function importance_reference(
     counts,
     X;
@@ -151,8 +146,7 @@ function importance_reference(
     sum_w = sum(w)
     w ./= sum_w
     ess = 1 / sum(abs2, w)
-    ## Marginal likelihood up to the data-only constants dropped by likelihood_censored,
-    ## with the delta-method standard error of its logarithm
+    ## Marginal likelihood up to the data-only constants dropped by likelihood_censored
     log_evidence = max_logw + log(sum_w) - log(n_draws)
     log_evidence_se = sqrt(max(1 / ess - 1 / n_draws, 0))
 

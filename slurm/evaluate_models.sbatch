@@ -27,7 +27,6 @@ export JULIA_NUM_THREADS=1
 ## srun steps (SlurmClusterManager's worker processes) need the PATH set above
 export SLURM_EXPORT_ENV=ALL
 
-## Intercept estimates for every NBE/NPE pair (skips models whose estimates exist) and NPE posterior
-## samples for the K=5 test set, then the combined CSVs and SBC ranks for the reference benchmark
+## Intercept estimates for every NBE/NPE pair
 "${JULIA[@]}" --project src/simulation_study.jl
 "${JULIA[@]}" --project src/combine_results.jl

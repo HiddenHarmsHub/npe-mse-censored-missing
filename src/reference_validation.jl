@@ -1,6 +1,4 @@
-## Software validation of the reference samplers (run locally with e.g. julia --project -t 12 src/reference_validation.jl [comparison] [coverage])
-## 1. comparison: NUTS, IRLS-MH and importance sampling agree on small simulated datasets
-## 2. coverage: NUTS credible intervals have nominal coverage under prior-predictive simulation (K=3)
+## Software validation of the reference samplers: julia --project -t 12 src/reference_validation.jl [comparison] [coverage]
 include("mse_functions.jl")
 include("mcmc_functions.jl")
 BLAS.set_num_threads(1)

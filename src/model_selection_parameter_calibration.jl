@@ -1,9 +1,4 @@
-## Calibration of the conditional NPE's parameter posteriors q(θ | y, m) given the true structure, for every
-## parameter: α, each β_k, and each latent γ̃_kl split by whether the interaction is active. Simulation-based
-## calibration ranks and central-interval coverage, per conditional NPE replicate on the same datasets.
-## An inactive γ̃ does not enter the likelihood, so its exact posterior is its prior N(0, σ_γ²); the
-## posterior sd ratio to the prior sd checks that the flow has learned this.
-## Run locally after model_selection_test_data.jl: MS_RUN=<run> julia --project src/model_selection_parameter_calibration.jl
+## Calibration of the conditional NPE's parameter posteriors given the true structure
 include("mse_functions.jl")
 include("model_selection_functions.jl")
 

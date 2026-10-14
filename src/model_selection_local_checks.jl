@@ -1,13 +1,4 @@
-## Local accuracy checks of the conditional NPE near the real datasets, for the structures reported in the
-## reanalysis (MAP, all interactions and the published structures).
-##   1. Real data: the neural conditional posterior against the exact (importance-sampling) posterior given
-##      the structure, parameter by parameter, and the same after neural importance sampling (NIS): the
-##      neural draws reweighted by p(y | θ) p(θ) / q(θ | y, m), with the importance ESS as a diagnostic.
-##   2. Observed-like simulation: parameters drawn from the exact posterior given the structure, data
-##      simulated from them (with the same censoring), and each dataset fitted exactly, by the conditional
-##      NPE and by NIS. Coverage of the true α and the neural error relative to the exact posterior show
-##      whether a real-data discrepancy is typical of data like the observed data.
-## Run locally after model_selection_real_data.jl: MS_RUN=<run> julia --project src/model_selection_local_checks.jl
+## Local accuracy checks of the conditional NPE near the real datasets
 include("mse_functions.jl")
 include("mcmc_functions.jl")
 include("model_selection_functions.jl")
@@ -25,10 +16,7 @@ mkpath(output_path)
 real_data = Dict("A" => load_silverman_data(), "B" => load_king_counts())
 literature_file(s) = joinpath(model_selection_output_path(run), "real_data", "$(s)_conditional_structures.csv")
 
-## Neural importance sampling for structure `mask`: the target is the exact posterior of the latent vector
-## [α; β; γ̃], whose inactive γ̃ keep their prior, so the weights are exact up to Monte Carlo error.
-## Draws outside the intercept support get zero weight. Returns resampled latent draws, the normalised
-## weights' ESS (as a fraction of the draws) and the log evidence estimate.
+## Neural importance sampling for structure `mask`
 function neural_importance_sampling(cnpe, y, counts, mask, system, priors, B; rng = Random.default_rng())
     K = system.K
     X = one_hot_encode_parameters(K)
@@ -49,8 +37,7 @@ function neural_importance_sampling(cnpe, y, counts, mask, system, priors, B; rn
     return (θ = θ[:, keep], ess = 1 / sum(abs2, w) / B, log_evidence = log_evidence)
 end
 
-## Exact posterior given the structure by importance sampling around the Laplace mode (latent vector with
-## inactive γ̃ drawn from their prior, to compare like with like)
+## Exact posterior given the structure by importance sampling around the Laplace mode
 function exact_conditional(counts, mask, system, priors, B; n_draws, rng = Random.default_rng())
     fit = log_evidence(counts, mask; system.censoring_lower, system.censoring_upper, priors, n_draws, n_keep = B, rng)
     θ = Float64.(fit.θ)
@@ -133,7 +120,7 @@ CSV.write(joinpath(output_path, "real_data_neural_vs_exact.csv"), real)
 sim = DataFrame(sim_rows)
 CSV.write(joinpath(output_path, "observed_like.csv"), sim)
 
-## Neural and NIS errors in α relative to the exact posterior median, in exact posterior sds, and coverage of the truth
+## Neural and NIS errors in α relative to the exact posterior median, in exact posterior sds
 summary = combine(groupby(sim, [:system, :structure, :interactions]),
     nrow => :n,
     [:neural_median, :exact_median, :exact_sd] => ((n, e, sd) -> mean((n .- e) ./ sd)) => :neural_shift_mean,

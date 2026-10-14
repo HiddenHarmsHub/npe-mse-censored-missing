@@ -14,14 +14,11 @@ module purge
 module load bear-apps/2022b/live
 module load Julia/1.10.0-linux-x86_64
 export JULIA_NUM_THREADS=1
-## srun steps (SlurmClusterManager's worker processes) need the module-loaded PATH above; on BlueBEAR they
-## only inherit it with SLURM_EXPORT_ENV=ALL (previously set by the bluebear module, which no longer loads)
+## srun steps (SlurmClusterManager's worker processes) need the module-loaded PATH above
 export SLURM_EXPORT_ENV=ALL
-## The model-selection run is the script's first argument (sbatch <script> <run>), default b4_g4. It is not
-## passed with --export, which would carry the login session's module state into the job.
+## The model-selection run is the script's first argument (sbatch <script> <run>), default b4_g4.
 export MS_RUN="${1:-b4_g4}"
 echo "Model-selection run: ${MS_RUN}"
 
 ## One worker per network: {A, B} × {classifier, conditional NPE} × 3 replicates.
-## Finished networks are skipped, so resubmitting after a time-out continues where it stopped.
 julia --project src/model_selection_train.jl

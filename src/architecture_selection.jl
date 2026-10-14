@@ -1,6 +1,4 @@
-## Freeze the base NPE architecture for the two model-selection systems (A: K=5 uncensored,
-## B: K=4 censored on [1, 4]) by scoring the trained grid_5 / grid_4 NPE models on fresh
-## validation sets. The selection rule is fixed here, before any model-selection result is seen.
+## Freeze the base NPE architecture for systems A and B by scoring the grid_5 and grid_4 NPEs on fresh validation sets
 using Pkg; Pkg.activate(".")
 using Distributed, SlurmClusterManager
 addprocs(SlurmManager(); exeflags=["--threads", "1", "--project"])
@@ -19,9 +17,7 @@ hidden = [1, 2, 3, 4]
 @everywhere encoding_dim = 128
 @everywhere train_size = train_size_default
 
-## Pre-specified rule: smallest intercept MAE among architectures with 95% intercept coverage
-## within 0.02 of nominal and mean calibration deviation (all parameters, 50/80/95%) at most 0.03.
-## If none qualifies, the smallest mean calibration deviation. Ties go to fewer weights.
+## Pre-specified rule: smallest intercept MAE with 95% coverage within 0.02 of nominal and mean calibration deviation at most 0.03
 const selection_rule = (cov95_tolerance = 0.02, calibration_tolerance = 0.03)
 
 ## Validation sets from the fixed all-interactions prior the grid models were trained on (seed 7)

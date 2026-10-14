@@ -1,23 +1,11 @@
 #!/bin/bash
-## Submit the model-selection pipeline for one run, with dependencies. From the repository root:
-##   bash slurm/submit_model_selection.sh            # original run, b4_g4: β, γ ~ N(0, 4²)
-##   bash slurm/submit_model_selection.sh b4_g4r     # original priors retrained with the new settings
-##   bash slurm/submit_model_selection.sh b4_g4x     # original priors, new settings, longer schedule
-##   bash slurm/submit_model_selection.sh b2_g2      # β, γ ~ N(0, 2²), new settings
-##   bash slurm/submit_model_selection.sh b1_g1      # β, γ ~ N(0, 1), new settings
-## Runs are defined in model_selection_runs (src/model_selection_functions.jl). The run name reaches the
-## Julia scripts through MS_RUN, which sbatch exports to the jobs. Every stage skips work already done,
-## so resubmitting a run only does what is missing.
-## Order: test data (and architecture selection, if not yet frozen) start at once; training waits for the
-## architecture; the reference study needs only the test data, so it runs alongside training; the
-## simulation study waits for training and test data; post-processing waits for both studies.
+## Submit the model-selection pipeline for one run, with dependencies.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 mkdir -p logs
 
 MS_RUN="${1:-b4_g4}"
-## The run name goes to each job as the sbatch script's argument (BlueBEAR does not pass the submitting
-## shell's environment to jobs, and exporting it explicitly breaks the module set-up or the worker PATH)
+## The run name goes to each job as the sbatch script's argument
 submit() { sbatch --parsable --job-name="$1_${MS_RUN}" "${@:2}" "${MS_RUN}"; }
 
 test_data=$(submit ms_test_data slurm/model_selection_test_data.sbatch)

@@ -20,17 +20,14 @@ function prepare_data(data::Vector{Int})
 end
 
 
-## First generate some random input data and set parameters
-## Generate random input data the user supplies
+## Random input data standing in for the user's counts
 user_inputted_data = vec(Int.(floor.(rand(Float64, K * 6 + 1, 1)*20)));
 user_inputted_data[user_inputted_data .< censoring_upper] .= -1; ## simulate censoring with -1
 
 input_data = prepare_data(user_inputted_data);
 
 
-###############
-# NBE Example #
-###############
+############### NBE Example #
 
 ## The NBE gives the 2.5%, 50% and 97.5% posterior quantiles of every parameter, stacked in that order
 function load_nbe(K, censoring_lower, censoring_upper, models_path)
@@ -54,9 +51,7 @@ nbe_median_estimates = nbe_quantiles[:, 2]
 
 
 
-###############
-# NPE Example #
-###############
+############### NPE Example #
 
 function load_npe(K, censoring_lower, censoring_upper, models_path; encoding_dim = 128)
     width = 256

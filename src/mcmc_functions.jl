@@ -19,10 +19,6 @@ include("irls_functions.jl")
 end
 
 ## Sampled in standardised coordinates z, with θ = mode + L z and L L' the Laplace covariance.
-## The intercept stays on its original scale and its prior support is enforced by rejection:
-## Turing's logit transform of the bounded intercept bends the narrow ridge along which the
-## intercept trades off against the main effects, and cell counts spanning many orders of
-## magnitude leave posterior scales that warm-up adaptation alone cannot learn.
 @model function mse_model_censored_laplace(y, X, mode, L, intercept_dist, beta_dist, gamma_dist, censoring_lower, censoring_upper)
     z ~ filldist(Flat(), length(mode))
     θ = mode .+ L * z
@@ -58,9 +54,7 @@ end
     end
 end
 
-## Log-likelihood up to a constant over observed cells, written relative to the saturated fit
-## so it stays O(number of cells) when counts are very large.
-## Cells with count -1 are interval censored and contribute log P(censoring_lower <= N <= censoring_upper).
+## Log-likelihood up to a constant over observed cells
 function likelihood_censored(counts::AbstractVector{<:Integer}, pars::AbstractVector, X::AbstractMatrix, censoring_lower::Integer, censoring_upper::Integer)
     η = X * pars
     ll = zero(eltype(η))
@@ -74,8 +68,7 @@ function likelihood_censored(counts::AbstractVector{<:Integer}, pars::AbstractVe
     return ll
 end
 
-## logpdf(Poisson(exp(η)), y) + logfactorial(y) - (y log y - y), written with δ = η - log y as
-## y (δ - expm1(δ)) so it keeps full precision for counts up to the simulator cap (~e^43)
+## logpdf(Poisson(exp(η)), y) + logfactorial(y) -
 poisson_kernel(y, η) = y > 0 ? y * ((η - log(y)) - expm1(η - log(y))) : -exp(η)
 
 function log_interval_prob(logλ, lower::Integer, upper::Integer)
@@ -96,7 +89,6 @@ function log_posterior(pars, counts, X, censoring_lower, censoring_upper; interc
 end
 
 ## Weighted ridge least squares on log counts, used as a deterministic starting point for Newton.
-## Censored cells take the midpoint of the censoring interval and the prior acts as the ridge.
 function log_count_start(counts, X, censoring_lower, censoring_upper, intercept_dist, beta_dist, gamma_dist; K = nothing)
     n_pars = size(X, 2)
     K = isnothing(K) ? Int(-0.5 + (sqrt(8 * (n_pars - 1) + 1) / 2)) : K
@@ -110,8 +102,7 @@ function log_count_start(counts, X, censoring_lower, censoring_upper, intercept_
     return θ
 end
 
-## Posterior mode by Newton's method, and the Laplace factor L with L L' = H⁻¹.
-## Eigenvalues of the negative Hessian are floored so flat directions stay bounded.
+## Posterior mode by Newton's method
 function laplace_approximation(counts, X; censoring_lower = 0, censoring_upper = 0, intercept_dist = Uniform(1, 10), beta_dist = Normal(0, 4), gamma_dist = Normal(0, 4), max_iter = 200, min_precision = 1e-2, K = nothing)
     priors = (intercept_dist = intercept_dist, beta_dist = beta_dist, gamma_dist = gamma_dist)
     f(θ) = log_posterior(θ, counts, X, censoring_lower, censoring_upper; priors..., K)
@@ -124,9 +115,7 @@ function laplace_approximation(counts, X; censoring_lower = 0, censoring_upper =
         for _ in 1:n_iter
             H = ForwardDiff.hessian(h, x)
             g = ForwardDiff.gradient(h, x)
-            ## Stop at the last finite iterate. When a badly fitting structure pushes the mode to the
-            ## intercept's lower bound, the logit-scale intercept runs off to -Inf, where the logistic
-            ## has NaN derivatives although the log posterior itself stays finite.
+            ## Stop at the last finite iterate
             (all(isfinite, H) && all(isfinite, g)) || break
             V, λ = precision_factor(H)
             step = V * ((V' * g) ./ λ)
@@ -141,8 +130,7 @@ function laplace_approximation(counts, X; censoring_lower = 0, censoring_upper =
         return x
     end
 
-    ## Search with the intercept on the logit scale so steps cannot leave its support,
-    ## then polish on the original scale where the ridge with the main effects is straight
+    ## Search with the intercept on the logit scale so steps cannot leave its support
     lower, upper = minimum(intercept_dist), maximum(intercept_dist)
     to_θ(φ) = vcat(lower + (upper - lower) / (1 + exp(-φ[1])), φ[2:end])
     θ0 = log_count_start(counts, X, censoring_lower, censoring_upper, intercept_dist, beta_dist, gamma_dist; K)
@@ -326,8 +314,7 @@ function run_mcmc_test_slice(slice_idx, test_counts, test_pars; censoring_lower 
     CSV.write(joinpath(paths.irls_summary, "irls_test_summary_$slice_idx.csv"), posterior_summary_df(irls_chains, irls_par_df, truth))
     CSV.write(joinpath(paths.irls_diagnostics, "irls_test_diagnostics_$slice_idx.csv"), hcat(DataFrame([meta]), irls_fit_df))
 
-    ## IRLS-MH mixes poorly on sparse or heavily censored data, so the IS proposal is built from
-    ## whichever sampler passed; the IS weights use the exact posterior either way
+    ## IRLS-MH mixes poorly on sparse or heavily censored data
     pilot = irls_fit_df.status[1] == "passed" ? "IRLS" : "NUTS"
     pilot_draws = Array(select(DataFrame(pilot == "IRLS" ? irls_chains : chains), r"intercept|betas|gammas"))
     start = time_ns()

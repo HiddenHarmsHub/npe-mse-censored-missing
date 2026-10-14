@@ -1,7 +1,4 @@
 ## Combine the per-chunk model-selection outputs and compute the summary tables.
-## Run locally after model_selection_simulation.jl and model_selection_reference_study.jl:
-## MS_RUN=<run> julia --project src/model_selection_combine.jl
-## Replicate 0 is the ensemble of replicates 1-3.
 include("mse_functions.jl")
 include("model_selection_functions.jl")
 
@@ -24,8 +21,7 @@ else
     posteriors = CSV.read(joinpath(output_path, "simulation_posteriors.csv"), DataFrame)
 end
 
-## Rows with no posterior draws inside the intercept support have NaN metrics; they are counted and left out
-## of the summaries. Results from before the n_draws column existed always had draws.
+## Rows with no posterior draws inside the intercept support have NaN metrics
 "n_draws" in names(posteriors) || (posteriors.n_draws .= missing)
 posteriors.no_draws = coalesce.(posteriors.n_draws .== 0, false)
 no_draws = combine(groupby(posteriors, [:system, :rep, :method]), :no_draws => (x -> count(x) ÷ 4) => :datasets_without_draws, nrow => :rows)
@@ -41,9 +37,7 @@ valid.intercept_band = clamp.(floor.(Int, (valid.intercept .- 1) ./ 1.8), 0, 4)
 valid = transform(groupby(valid, :system), :entropy => (e -> searchsortedfirst.(Ref(quantile(e, [1/3, 2/3])), e)) => :entropy_tercile)
 levels = round.(Int, 100 .* coverage_levels)
 
-## Interaction strength. |γ| bands for single interactions, and per dataset the weakest and strongest active
-## interaction ("none" for the no-interaction structure). The weakest one limits structure recovery.
-## The true coefficients come from the test sets (model_selection_test_data.jl regenerates them exactly).
+## Interaction strength
 gamma_band(g) = g < 0.5 ? "a: <0.5" : g < 1 ? "b: 0.5-1" : g < 2 ? "c: 1-2" : g < 4 ? "d: 2-4" : "e: >=4"
 test_sets = Dict(s => BSON.load(model_selection_test_file(run, sys)) for (s, sys) in model_selection_systems if isfile(model_selection_test_file(run, sys)))
 function active_gammas(s, i)
@@ -92,8 +86,7 @@ for g in groupby(valid, [:system, :rep])
 end
 CSV.write(joinpath(output_path, "inclusion_reliability.csv"), DataFrame(reliability))
 
-## Inclusion probability of each interaction by its true |γ| (inactive interactions as their own band):
-## how strong an interaction must be before the classifier detects it
+## Inclusion probability of each interaction by its true |γ| (inactive interactions as their own band)
 if !isempty(strength_strata)
     strength = NamedTuple[]
     for g in groupby(valid, [:system, :rep])
@@ -114,8 +107,7 @@ if !isempty(strength_strata)
 end
 CSV.write(joinpath(output_path, "size_calibration.csv"), DataFrame(size_calibration))
 
-## Population inference. Coverage under a sensitivity prior p' reweights the primary-prior test set
-## by p'(m) / p(m) of the true structure, which is exact importance weighting over structures.
+## Population inference
 joined = innerjoin(posteriors, select(valid, :dataset, :system, :rep, :true_size, :intercept_band, :entropy_tercile, :truth_is_map,
                                        :n_censored, :n_zero, strength_strata..., r"^logw_"), on = [:dataset, :system, :rep])
 weighted_mean(x, w) = sum(x .* w) / sum(w)
@@ -143,7 +135,7 @@ end
 CSV.write(joinpath(output_path, "population_by_stratum.csv"), DataFrame(stratum_rows))
 
 ## ---- Reference model averaging and its agreement with the neural structure posterior ----
-## Correlation is undefined when either inclusion vector is constant (e.g. all near 0 or 1)
+## Correlation is undefined when either inclusion vector is constant
 safe_cor(a, b) = std(a) > 1e-12 && std(b) > 1e-12 ? cor(a, b) : missing
 ## The neural side is the ensemble when all replicates exist, otherwise replicate 1
 reference_path = joinpath(output_path, "reference")

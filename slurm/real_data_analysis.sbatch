@@ -8,10 +8,7 @@
 #SBATCH --mail-type=ALL
 #SBATCH --mail-user=j.s.marsh@bham.ac.uk
 
-## Fixed-structure real-data analysis (NBE, NPE, NUTS and MLE for the Silverman and King data), after
-## train_models.jl and simulation_study.jl. It picks each architecture from output/intercept_estimates/,
-## which is on the cluster only, and overwrites output/real_data_analysis/.
-## Submit from the repository root: sbatch slurm/real_data_analysis.sbatch
+## Fixed-structure real-data analysis
 set -euo pipefail
 cd "${SLURM_SUBMIT_DIR}"
 module purge

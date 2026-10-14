@@ -28,5 +28,4 @@ export JULIA_NUM_THREADS=1
 export SLURM_EXPORT_ENV=ALL
 
 ## Inference times on 100 K=5 test datasets: NBE, NPE sampling and a short NUTS sweep, one dataset per worker.
-## Datasets with a results file are skipped, so resubmitting continues where it stopped.
 "${JULIA[@]}" --project src/speed_comparisons.jl inference

@@ -1,10 +1,8 @@
-## Neural inference over pairwise interaction structures: a classifier q(m | y) over all
-## 2^J structures and a conditional NPE q(θ | y, m), combined into a model-averaged posterior.
-## Include after mse_functions.jl.
+## Neural inference over pairwise interaction structures
 using Flux, Distributions, Random, Statistics
 import Distributions: logfactorial
 
-## Application-matched settings. A: Silverman (K=5, uncensored), B: King (K=4, cells in [1, 4] censored)
+## Application-matched systems: A (Silverman, K=5, uncensored) and B (King, K=4, censored on [1, 4])
 const model_selection_systems = Dict(
     "A" => (system = "A", K = 5, censoring_lower = 0, censoring_upper = 0),
     "B" => (system = "B", K = 4, censoring_lower = 1, censoring_upper = 4),
@@ -93,6 +91,24 @@ function simulate_model_selection_data(n, system; model_prior = primary_model_pr
     return (masks = masks, pars = pars, counts = counts, counts_obs = counts_obs, y = y, N0 = Int.(N0), N = vec(sum(Float64.(counts), dims = 1)) .+ N0)
 end
 
+## ---- Data summaries computable from censored data, for simulations and real data alike ----
+function data_summaries(counts_obs, K)
+    cells = enumerate_all_combinations(K)
+    exact = counts_obs .>= 0
+    in_list(k) = [string(k) in split(c, ",") for c in cells]
+    singletons = [length(split(c, ",")) == 1 for c in cells]
+    total = sum(Float64, counts_obs[exact]; init = 0.0)  # cells can reach ~e^43, so integer sums overflow
+    return merge(
+        (total_exact = total, n_censored = count(.!exact), n_zero = count(==(0), counts_obs),
+         singleton_share = total == 0 ? NaN : sum(Float64, counts_obs[exact .& singletons]; init = 0.0) / total,
+         max_cell = maximum(counts_obs), log_total = log(total + 1)),
+        NamedTuple(Symbol("list_$k") => sum(Float64, counts_obs[exact .& in_list(k)]; init = 0.0) for k in 1:K),
+    )
+end
+
+## Where a summary lies in its prior-predictive distribution (mid-rank percentile)
+domain_flag(p) = 0.025 <= p <= 0.975 ? "within" : (0.005 <= p <= 0.995 ? "near boundary" : "outside")
+
 ## ---- Training ----
 
 ## For the classifier the target θ is the one-hot structure label; the other fields drive the simulator
@@ -130,23 +146,13 @@ n_inputs(system) = (2^system.K - 1) * (system.censoring_upper > 0 ? 2 : 1)
 mlp_trunk(n_in, width, n_hidden) = [Dense(n_in, width, relu), [Dense(width, width, relu) for _ in 1:n_hidden]...]
 
 ## ---- Runs ----
-## Training settings for the retraining runs. The conditional NPE's validation loss was noisy and early
-## stopping halted it after 39-67 epochs while still improving, with one blow-up: so a larger validation
-## set, patience of 50 epochs, gradient-norm clipping and a lower learning rate. The 5-list classifier was
-## still improving at epoch 200 and much less sharp than the reference: so 400 epochs and width 256
-## (classifier-only tuning on simulated data, as the implementation plan allows).
+## Training settings for the retraining runs
 const retraining_settings = (
     classifier = (train_size = 100_000, epochs = 400, stopping_epochs = 50, batchsize = 64, lr = 5e-4, clip = 1.0, K_val = 50_000, width = Dict("A" => 256)),
     cnpe = (train_size = 100_000, epochs = 200, stopping_epochs = 50, batchsize = 32, lr = 2e-4, clip = 1.0, K_val = 50_000),
 )
 
-## Each named run fixes the coefficient priors and the training settings and has its own folders,
-## so runs never overwrite each other. Scripts pick a run with the MS_RUN environment variable.
-## `label` names the run in comparison tables and figures. `n_classifiers` and `n_cnpe` (default 3 each) set
-## how many independently trained replicates of each network the run has. The ensemble (rep 0) averages all
-## classifiers; for the conditional NPE it either mixes all replicates (`cnpe_combination = :mixture`, the
-## default) or uses the one replicate with the lowest best validation loss (`:best`).
-## A classifier `width` of `nothing` keeps the frozen base width; K_val = nothing keeps the default K ÷ 5 + 1.
+## Each named run fixes the coefficient priors and the training settings and has its own folders
 const model_selection_runs = Dict(
     ## Original run: β, γ ~ N(0, 4²); NeuralEstimators defaults (Adam 5e-4, early stopping after 10 epochs)
     "b4_g4" => (run = "b4_g4", label = "N(0, 4²), original training", beta_mean = 0, beta_sd = 4, gamma_sd = 4,
@@ -157,20 +163,11 @@ const model_selection_runs = Dict(
     ## Prior sensitivity: β, γ ~ N(0, 2²) and N(0, 1), with the same training settings
     "b2_g2" => (run = "b2_g2", label = "N(0, 2²)", beta_mean = 0, beta_sd = 2, gamma_sd = 2, retraining_settings...),
     "b1_g1" => (run = "b1_g1", label = "N(0, 1)", beta_mean = 0, beta_sd = 1, gamma_sd = 1, retraining_settings...),
-    ## The retrained N(0, 4²) conditional NPEs were far from converged (validation loss still falling by about
-    ## 2 nats over their last 50 epochs) and the classifiers gained 0.1-0.2 nats in their final annealing phase,
-    ## so the same settings with a three times (conditional NPE) and two times (classifier) longer schedule,
-    ## trained from scratch. Warm restarts from b4_g4r were tried and rejected: with a fresh Adam state even
-    ## a peak learning rate of 3e-6 pushed a converged flow off its optimum.
-    ## Ensemble of 10 classifiers (averaging consistently sharpened the structure probabilities) with a single
-    ## conditional NPE, the replicate with the lowest validation loss (mixing flows mostly widened the
-    ## population intervals beyond nominal)
+    ## The retrained N(0, 4²) conditional NPEs were far from converged
     "b4_g4x" => (run = "b4_g4x", label = "N(0, 4²), extended training", beta_mean = 0, beta_sd = 4, gamma_sd = 4,
         n_classifiers = 10, n_cnpe = 3, cnpe_combination = :best,
         classifier = merge(retraining_settings.classifier, (epochs = 800, stopping_epochs = 100)),
-        ## Patience equals the schedule for the conditional NPE: its loss plateaus while the learning rate is high
-        ## and only falls as the cosine schedule anneals, and patience 100 stopped two five-list replicates on the
-        ## plateau (epochs 257 and 196). No early stopping; the best epoch is still kept.
+        ## Patience equals the schedule for the conditional NPE
         cnpe = merge(retraining_settings.cnpe, (epochs = 600, stopping_epochs = 600))),
 )
 model_selection_run(name = get(ENV, "MS_RUN", "b4_g4")) = model_selection_runs[name]
@@ -204,8 +201,7 @@ prune_training_log(dir) = foreach(f -> occursin(r"network.*\.bson", f) && rm(joi
 ## NeuralEstimators reads the learning rate from `rule.eta`, which an OptimiserChain does not have
 NeuralEstimators.findlr(opt::Flux.Optimisers.Leaf{<:Flux.Optimisers.OptimiserChain}) = last(opt.rule.opts).eta
 
-## Training keyword arguments from a run's settings: Adam, optionally after gradient-norm clipping,
-## with NeuralEstimators' default cosine-annealed learning rate
+## Training keyword arguments from a run's settings
 function training_options(settings, estimator)
     rule = isnothing(settings.clip) ? Flux.Adam(settings.lr) : Flux.Optimisers.OptimiserChain(Flux.Optimisers.ClipNorm(settings.clip), Flux.Adam(settings.lr))
     options = (K = settings.train_size, m = 1, settings.epochs, settings.stopping_epochs, settings.batchsize,
@@ -261,8 +257,7 @@ function load_model_selection_estimator(filename, path)
     isfile(file) || error("Model file $filename not found in $path.")
     return BSON.load(file)[:estimator]
 end
-## The run's replicates of each network; rep = 0 loads the ensemble: every classifier, and for the conditional
-## NPE either every replicate or the selected one (see cnpe_combination)
+## The run's replicates of each network
 classifier_replicates(config) = 1:config.n_classifiers
 cnpe_replicates(config) = 1:config.n_cnpe
 ## Replicates with both networks, which can be evaluated on their own
@@ -276,7 +271,6 @@ function load_cnpe(config, rep)
 end
 
 ## Best (minimum over epochs) validation loss of each conditional NPE replicate, from its training log.
-## Each replicate has its own 50,000-dataset validation set, simulated from the same prior.
 function cnpe_validation_losses(config; path = models_path(config))
     map(cnpe_replicates(config)) do rep
         log = joinpath(path, "logs", replace(cnpe_filename(config, rep), ".bson" => ""), "loss_per_epoch.csv")
@@ -330,7 +324,6 @@ end
 in_support(θ, lower, upper) = θ[:, lower .<= θ[1, :] .<= upper]
 
 ## Up to B draws restricted to the intercept support, sampling until enough are accepted.
-## Returns fewer (possibly none) when the approximation puts almost no mass inside the support.
 function bounded_draws(estimator, input, B; lower = 1.0, upper = 10.0, max_rounds = 20)
     draws = Matrix{Float32}[]
     have = 0
@@ -347,8 +340,7 @@ end
 
 conditional_posterior(cnpe, y, mask, B; kwargs...) = bounded_draws(cnpe, reshape(cnpe_input(y, mask), :, 1), B; kwargs...)
 
-## Draw from Poisson(e^η) truncated to [lower, upper]; the e^η term is shared by every k and
-## dropped, so very large η cannot overflow
+## Draw from Poisson(e^η) truncated to [lower, upper]
 function truncated_poisson(η, lower, upper; rng = Random.default_rng())
     support = lower:upper
     lp = [k * η - logfactorial(k) for k in support]
@@ -356,8 +348,7 @@ function truncated_poisson(η, lower, upper; rng = Random.default_rng())
     return support[rand(rng, Categorical(p ./ sum(p)))]
 end
 
-## Realised unseen count N0 ~ Poisson(e^α) and total N = N_obs + N0. Censored cells are imputed from
-## their truncated Poisson given θ, so N_obs carries the uncertainty about suppressed counts.
+## Realised unseen count N0 ~ Poisson(e^α) and total N = N_obs + N0.
 function population_draws(θ_eff, counts_obs; censoring_lower = 0, censoring_upper = 0, X = nothing, rng = Random.default_rng())
     K = Int(log2(length(counts_obs) + 1))
     X = isnothing(X) ? one_hot_encode_parameters(K) : X
@@ -378,10 +369,7 @@ end
 
 effective_draws(θ, models, K) = isempty(models) ? θ : reduce(hcat, [effective_parameters(t, model_mask(c, K)) for (t, c) in zip(eachcol(θ), models)])
 
-## Model-averaged posterior from q(m | y) q(θ | y, m), restricted jointly to the intercept support:
-## draw structures from π and parameters from the conditional NPE, keep the draws inside the support,
-## and repeat until B are kept. A structure's weight is therefore π(m) times its acceptance rate, which
-## is the truncated joint approximation; a structure with no mass inside the support drops out.
+## Model-averaged posterior from q(m | y) q(θ | y, m), restricted jointly to the intercept support
 function sample_model_averaged_posterior(cnpe, y, π, B, system; counts_obs, lower = 1.0, upper = 10.0, max_rounds = 20, rng = Random.default_rng())
     K = system.K
     π = π ./ sum(π)
@@ -418,8 +406,7 @@ function sample_conditional_population(cnpe, y, mask, B, system; counts_obs, rng
     return (; models, θ, θ_eff, pop...)
 end
 
-## Law of total variance over groups: weights default to the empirical group frequencies,
-## in which case within + between equals the (uncorrected) total variance exactly
+## Law of total variance over groups
 function variance_decomposition(values, groups; weights = nothing)
     isempty(values) && return (within = NaN, between = NaN, total = NaN, between_share = NaN)
     ids = unique(groups)
@@ -468,7 +455,7 @@ function interval_score(lo, hi, truth, level)
     return (hi - lo) + (2 / a) * (lo - truth) * (truth < lo) + (2 / a) * (truth - hi) * (truth > hi)
 end
 
-## With no draws (no posterior mass inside the intercept support) every metric is NaN, so the row is kept and flagged
+## With no draws (no posterior mass inside the intercept support) every metric is NaN
 function posterior_metrics(draws, truth; levels = coverage_levels, rng = Random.default_rng())
     isempty(draws) && return merge(map(_ -> NaN, posterior_metrics([0.0, 1.0], truth; levels)), (truth = Float64(truth), n_draws = 0))
     draws = Float64.(draws)
@@ -503,8 +490,7 @@ end
 
 ## ---- Simulation study ----
 
-## Evaluate one replicate's networks on test datasets `idx`: structure metrics (one row per dataset)
-## and posterior metrics for α, λ0, N0 and N under each method (one row per dataset × method × quantity)
+## Evaluate one replicate's networks on test datasets `idx`
 function evaluate_simulation_chunk(config, rep, idx, test, classifier, cnpe, fixed_npe; B = 4000)
     K, J = config.K, binomial(config.K, 2)
     primary = BetaBinomialModelPrior(config.a, config.b)

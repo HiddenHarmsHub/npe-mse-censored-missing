@@ -1,7 +1,4 @@
-## Reference posterior model probabilities for a stratified subset of the model-selection test sets:
-## all 2^J structures enumerated, each marginal likelihood by importance sampling (Laplace-t proposal).
-## The first n_check datasets also repeat the top structures with a second proposal.
-## The run (priors) comes from MS_RUN; see model_selection_runs.
+## Reference posterior model probabilities for a stratified subset of the model-selection test sets
 using Pkg; Pkg.activate(".")
 using Distributed, SlurmClusterManager
 addprocs(SlurmManager(); exeflags=["--threads", "1", "--project"])

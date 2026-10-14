@@ -1,14 +1,7 @@
-## Reference posterior model probabilities by enumerating every interaction structure and
-## estimating each marginal likelihood p(y | m) by importance sampling around the Laplace mode.
-## Include after mse_functions.jl, mcmc_functions.jl and model_selection_functions.jl.
+## Reference posterior model probabilities by enumerating every structure, with marginal likelihoods by importance sampling
 import Optim
 
 ## Log marginal likelihood of structure `mask`, integrating over the active parameters only.
-## The data-only constants dropped by likelihood_censored are the same for every structure, so
-## they cancel in the posterior model probabilities. Returns resampled draws on the full
-## (effective) parameter vector, with zeros for inactive interactions.
-## `X` replaces the corner-point design (one column per parameter of the full model) and `M` maps the
-## draws back to corner-point parameters; both are used for the sum-to-zero g-priors below.
 function log_evidence(counts, mask; censoring_lower = 0, censoring_upper = 0, priors = coefficient_priors(), n_draws = 50_000, n_keep = 500, ν = 4, scale = 1.5, pilot_draws = nothing, X = nothing, M = nothing, rng = Random.default_rng())
     K = Int(log2(length(counts) + 1))
     active = vcat(trues(1 + K), mask)
@@ -22,7 +15,6 @@ function log_evidence(counts, mask; censoring_lower = 0, censoring_upper = 0, pr
 end
 
 ## Second, independent proposal: a heavier-tailed fit to the first run's weighted draws.
-## Agreement of the two log evidences checks the Laplace-t proposal.
 function log_evidence_check(counts, mask; kwargs...)
     first = log_evidence(counts, mask; kwargs...)
     K = Int(log2(length(counts) + 1))
@@ -61,10 +53,6 @@ function reference_model_average(counts, system; model_prior = primary_model_pri
 end
 
 ## Maximum likelihood fit of one structure, with a Wald interval for λ0 and the information criteria.
-## N adds λ0 and, for each censored cell, its fitted mean truncated to the censoring interval.
-## The likelihood omits data-only constants that are the same for every structure, so AIC and BIC
-## differences across structures are exact. BIC is given with two sample sizes: the number of observable
-## cells (2^K - 1, as in King et al. 2021) and the number of observed individuals.
 function fit_mle(counts, mask; censoring_lower = 0, censoring_upper = 0, priors = coefficient_priors())
     K = Int(log2(length(counts) + 1))
     Xm = one_hot_encode_parameters(K)[:, vcat(trues(1 + K), mask)]
@@ -84,15 +72,7 @@ function fit_mle(counts, mask; censoring_lower = 0, censoring_upper = 0, priors 
 end
 
 ## ---- g-priors (prior sensitivity) ----
-## The default priors of conting (Overstall and King 2014): sum-to-zero coding z = 2x - 1 over the full 2^K
-## table, so X'X = 2^K I and the g-prior θ_m | σ² ~ N(0, σ² n (X_m'X_m)^{-1}) is N(0, σ² I): iid N(0, σ²) on
-## every sum-to-zero main effect u_i and interaction u_ij, with a flat intercept. σ² = 1 is the unit-information
-## prior (Ntzoufras et al. 2003); the Sabanés Bové and Held (2011) hyper-g prior puts σ² ~ IG(a, b), conting's
-## default being shape = scale = 0.001 / 2.
-## We keep α = log λ0 as the intercept (a flat sum-to-zero intercept gives a flat α), with its Uniform(1, 10)
-## support, and write the cells in (α, u): η_x = α + Σ u_i (z_i + 1) + Σ u_ij (z_i z_j - 1). In corner-point
-## terms γ_ij = 4 u_ij and β_i = 2 u_i - 2 Σ_j u_ij over the active interactions of list i, so the
-## unit-information prior has γ ~ N(0, 4²), the scale of the primary prior, with correlated main effects.
+## The default priors of conting (Overstall and King 2014)
 function sum_to_zero_map(K)
     pairs = enumerate_two_digit_numbers(K)
     M = zeros(1 + K + length(pairs), 1 + K + length(pairs))
@@ -118,11 +98,7 @@ function gprior_evidences(counts, system, σ²; n_draws = 50_000, n_keep = 500, 
                          n_draws, n_keep, X, M, rng) for c in 1:n_models(K)]
 end
 
-## Hyper-g: integrate the evidence over τ = log σ² with σ² ~ IG(a, b). The log evidence is computed on a grid of
-## τ and interpolated linearly; beyond the grid it is extended with the slope of its last two points (for large
-## σ² the evidence falls as σ^-p, p the number of normal-prior parameters), and the integral is truncated where
-## the prior and evidence make the remainder negligible. Returns, per structure, the log evidence and the
-## posterior weights of the grid points, used to mix the per-σ² draws.
+## Hyper-g: integrate the evidence over τ = log σ² with σ² ~ IG(a, b)
 function hyper_g_evidence(log_ev_grid, τ_grid; a = 5e-4, b = 5e-4, τ_max = 3000.0, step = 0.05)
     log_prior_τ(τ) = a * log(b) - Distributions.loggamma(a) - a * τ - b * exp(-τ)
     slope = (log_ev_grid[end] - log_ev_grid[end-1]) / (τ_grid[end] - τ_grid[end-1])

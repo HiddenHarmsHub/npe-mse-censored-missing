@@ -1,10 +1,4 @@
-## Prior sensitivity for the supplement: exact model averaging of the UK (A) and King (B) data under the default
-## g-priors of conting (Overstall and King 2014), in place of independent N(0, σ²) coefficient priors:
-##   - unit information: iid N(0, 1) on the sum-to-zero main effects and interactions (σ² = 1);
-##   - hyper-g (Sabanés Bové and Held 2011): σ² ~ IG(0.0005, 0.0005), integrated over a grid of log σ².
-## Both keep α = log λ0 ~ Uniform(1, 10) (conting's intercept is flat). See sum_to_zero_map in
-## model_selection_reference.jl. Exact enumeration only: the networks would need retraining under these priors.
-## Run locally with threads: julia --project -t auto src/model_selection_gprior.jl
+## Prior sensitivity for the supplement
 include("mse_functions.jl")
 include("mcmc_functions.jl")
 include("model_selection_functions.jl")
@@ -47,8 +41,7 @@ for s in ["A", "B"]
                           log_evidence_se = grid[g][c].log_evidence_se, ess = grid[g][c].ess)
                          for g in eachindex(τ_grid) for c in 1:n_models(K)]))
 
-    ## Unit information: the grid point σ² = 1. Hyper-g: integrate over σ², mixing each structure's draws
-    ## across the grid in proportion to the posterior mass of σ² near each point.
+    ## Unit information: the grid point σ² = 1
     uip = grid[findfirst(==(0.0), τ_grid)]
     hyper = map(1:n_models(K)) do c
         h = hyper_g_evidence(log_ev[:, c], τ_grid)

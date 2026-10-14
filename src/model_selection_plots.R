@@ -1,5 +1,4 @@
-## Figures for the model-selection study. Reads the CSVs written by model_selection_combine.jl and
-## model_selection_real_data.jl for the run named by MS_RUN (default b4_g4), writes PNGs to output/figures/
+## Figures for the model-selection study.
 pacman::p_load(tidyverse)
 
 run <- Sys.getenv("MS_RUN", "b4_g4")
@@ -9,8 +8,7 @@ dir.create(figures_dir, showWarnings = FALSE, recursive = TRUE)
 ## Neural results for the ensemble of replicates (rep 0) when present, otherwise replicate 1
 plot_rep <- function(df) if (0 %in% df$rep) 0 else 1
 
-## Fixed categorical order, validated for colour-vision deficiency on a light surface; two slots sit
-## below 3:1 contrast, so every series also gets its own point shape
+## Fixed categorical order, validated for colour-vision deficiency on a light surface
 method_colours <- c(
     "Model averaged" = "#2a78d6",
     "All interactions" = "#eb6834",
@@ -84,8 +82,7 @@ if (file.exists(strength_file)) {
 }
 
 ## ---- Conditional NPE parameter calibration (SBC ranks given the true structure) ----
-## ECDF of the ranks minus the uniform CDF, with the 95% Kolmogorov–Smirnov band: the selected replicate, or
-## one line per replicate for runs that mix the conditional NPEs (no replicate is selected)
+## ECDF of the ranks minus the uniform CDF, with the 95% Kolmogorov–Smirnov band
 ranks_file <- file.path(input_dir, "parameter_calibration_ranks.csv")
 if (file.exists(ranks_file)) {
     ranks <- read_csv(ranks_file, show_col_types = FALSE)
@@ -176,8 +173,7 @@ comparison_dir <- file.path("output", "model_selection_comparison")
 ## Up to four runs: fixed hue order, plus a shape per run because two of the hues are low-contrast
 prior_colours <- c("#2a78d6", "#eb6834", "#1baf7a", "#eda100")
 prior_shapes <- c(16, 17, 15, 18)
-## The original-training run is superseded by the retrained and extended N(0,4²) runs; it stays in the tables
-## but is left out of these figures, which take at most four runs
+## The original-training run is superseded by the retrained and extended N(0,4²) runs
 superseded <- "N(0, 4²), original training"
 if (file.exists(file.path(comparison_dir, "real_data_population.csv"))) {
     totals <- read_csv(file.path(comparison_dir, "real_data_population.csv"), show_col_types = FALSE) |>

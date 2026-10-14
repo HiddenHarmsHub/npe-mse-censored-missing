@@ -5,8 +5,6 @@ using NeuralEstimators
 include("nbe_layers.jl")
 
 ## Training budget for the NBE and NPE models (simulations per epoch is the train_size in model filenames).
-## Chosen from the NPE pilot (npe_pilot.jl): the original 10,000 simulations per epoch with early stopping after
-## 5 epochs left the NPE under-trained, with over-wide posteriors.
 const train_size_default = 200_000
 const training_settings = (epochs = 100, stopping_epochs = 15, K_val = 20_000, batchsize = 256, learning_rate = 1e-3, input_scale = 0.1)
 const npe_num_coupling_layers = 10
@@ -33,8 +31,7 @@ function enumerate_two_digit_numbers(K::Int)
     return numbers
 end
 
-## Custom Poisson sampler to avoid overflow
-## rough error point is around logλ = 43.669
+## Poisson sampler with the log-rate capped to avoid overflow (around logλ = 43.669)
 function rpois(logλ; logλ_max = 43.0)
     if logλ > logλ_max  
         return rand(Poisson(exp(logλ_max)))
@@ -169,7 +166,7 @@ function construct_MLP(width::Int, n_hidden::Int, n_lists::Int, censoring::Bool 
 end
 
 ## NBE network: one MLP whose final layer gives the stacked 0.025, 0.5 and 0.975 quantiles of all parameters
-function construct_quantile_MLP(width::Int, n_hidden::Int, n_lists::Int, censoring::Bool = false, intercept_support = nothing; input_scale = nothing)
+function construct_quantile_MLP(width::Int, n_hidden::Int, n_lists::Int, censoring::Bool = false, intercept_support = nothing; input_scale = nothing, n_quantiles = 3)
     n_data = 2^n_lists - 1
     n_pars = 1 + n_lists + binomial(n_lists, 2)  # intercept + betas + gammas
     if censoring
@@ -181,28 +178,28 @@ function construct_quantile_MLP(width::Int, n_hidden::Int, n_lists::Int, censori
         input_layer...,
         Dense(n_data, width, relu),
         [Dense(width, width, relu) for _ in 1:n_hidden]...,
-        Dense(width, 3 * n_pars),
-        MonotoneQuantiles(n_pars, intercept_support)
+        Dense(width, n_quantiles * n_pars),
+        n_quantiles == 3 ? MonotoneQuantiles(n_pars, intercept_support) : MonotoneQuantilesQ(n_pars, n_quantiles, intercept_support)
     )
 end
 
 
-## NBE: one network for the 0.025, 0.5 and 0.975 posterior quantiles of every parameter, trained on the
-## summed quantile (pinball) loss. The training keywords default to the settings used for the original NBE models.
+## NBE: one network for the 0.025, 0.5 and 0.975 posterior quantiles of every parameter
 function train_model_mlp(
     n_lists, width, n_hidden, train_size;
     m = 1, censoring_lower = 0, censoring_upper = 0, savepath = nothing, intercept_dist = Uniform(1, 10),
+    beta_dist = Normal(0, 4), gamma_dist = Normal(0, 4), probs = nbe_probs, filename = nothing,
     epochs = 100, stopping_epochs = 5, K_val = train_size ÷ 5 + 1, batchsize = 32, learning_rate = 5e-4,
     input_scale = nothing, training_path = nothing
 )
-    estimator_mdl_str = "model_$(n_lists)_$(width)_$(n_hidden)_$(train_size)_$(censoring_lower)_$(censoring_upper)_$(m).bson"
+    estimator_mdl_str = isnothing(filename) ? "model_$(n_lists)_$(width)_$(n_hidden)_$(train_size)_$(censoring_lower)_$(censoring_upper)_$(m).bson" : filename
 
     intercept_support = ifelse(typeof(intercept_dist) <: Uniform, params(intercept_dist), nothing)
 
     all_combinations = enumerate_all_combinations(n_lists)
     two_digit_numbers = enumerate_two_digit_numbers(n_lists)
 
-    sample_nbe(n_reps) = hcat([sample_parameters(n_lists, intercept_dist = intercept_dist) for _ in 1:n_reps]...)
+    sample_nbe(n_reps) = hcat([sample_parameters(n_lists; intercept_dist, beta_dist, gamma_dist) for _ in 1:n_reps]...)
     function simulate_nbe(θ, m)
         Z = Folds.map(eachcol(θ)) do params
             simulate_data(params, m, censoring_lower = censoring_lower, censoring_upper = censoring_upper, all_combinations = all_combinations, two_digit_numbers = two_digit_numbers)
@@ -210,14 +207,14 @@ function train_model_mlp(
         return hcat(Z...)
     end
 
-    network = construct_quantile_MLP(width, n_hidden, n_lists, censoring_upper > 0, intercept_support; input_scale = input_scale)
+    network = construct_quantile_MLP(width, n_hidden, n_lists, censoring_upper > 0, intercept_support; input_scale = input_scale, n_quantiles = length(probs))
     estimator = PointEstimator(network)
 
     estimator = train(
         estimator, 
         sample_nbe, 
         simulate_nbe;
-        loss = (θ̂, θ) -> quantileloss(θ̂, θ, nbe_probs),
+        loss = (θ̂, θ) -> quantileloss(θ̂, θ, probs),
         K = train_size, K_val = K_val, m = m, epochs = epochs, stopping_epochs = stopping_epochs, batchsize = batchsize,
         optimiser = Flux.setup(Adam(learning_rate), estimator),
         savepath = training_path
@@ -255,14 +252,13 @@ function load_test_counts(test_path, list_size, censoring_lower = 0, censoring_u
     return Z, test_data[:params]
 end
 
-## True if any cell's log-rate exceeds the cap used by rpois, i.e. the data are not exact draws from the model
+## True if any cell's log-rate exceeds the cap used by rpois
 function is_capped(pars; logλ_max = 43.0)
     K = Int(-0.5 + (sqrt(8 * length(pars) - 7) / 2))
     return maximum(one_hot_encode_parameters(K) * pars) > logλ_max
 end
 
-## Proportional stratified sample by intercept band and number of censored cells,
-## so the subset remains a sample from the prior predictive
+## Proportional stratified sample by intercept band and number of censored cells
 function select_benchmark_datasets(test_pars, test_counts; n = 1000, n_bands = 5, intercept_support = (1.0, 10.0), seed = 1)
     rng = Random.MersenneTwister(seed)
     N = size(test_pars, 2)
@@ -313,9 +309,7 @@ function load_silverman_data(K::Int = 5)
     return output
 end
 
-## NBE outputs the stacked quantiles [q0.025; q0.5; q0.975], each of length n_pars. The loaders return the
-## median (ci = false) or [lower; upper] bounds (ci = true) as functions of the data, as the separate point and
-## interval estimators did.
+## NBE outputs the stacked quantiles [q0.025; q0.5; q0.975], each of length n_pars.
 const nbe_probs = [0.025, 0.5, 0.975]
 quantile_rows(q, r) = q isa AbstractVector ? q[r] : q[r, :]
 function nbe_view(estimator, ci::Bool)
@@ -422,10 +416,11 @@ end
 function train_npe(
     n_lists, width, n_hidden, encoding_dim, train_size;
     m = 1, censoring_lower = 0, censoring_upper = 0, savepath = nothing, intercept_dist = Uniform(1, 10),
+    beta_dist = Normal(0, 4), gamma_dist = Normal(0, 4), filename = nothing,
     epochs = 200, stopping_epochs = 5, K_val = train_size ÷ 5 + 1, batchsize = 32, learning_rate = 5e-4,
     num_coupling_layers = 6, input_scale = nothing, training_path = nothing
 )
-    estimator_mdl_str = "model_$(n_lists)_$(width)_$(n_hidden)_$(encoding_dim)_$(train_size)_$(censoring_lower)_$(censoring_upper)_$(m).bson"
+    estimator_mdl_str = isnothing(filename) ? "model_$(n_lists)_$(width)_$(n_hidden)_$(encoding_dim)_$(train_size)_$(censoring_lower)_$(censoring_upper)_$(m).bson" : filename
     n_data = 2^n_lists - 1
     n_pars = 1 + n_lists + binomial(n_lists, 2)  # intercept + betas + gammas
     if censoring_upper > 0
@@ -435,7 +430,7 @@ function train_npe(
     all_combinations = enumerate_all_combinations(n_lists)
     two_digit_numbers = enumerate_two_digit_numbers(n_lists)
 
-    sample_nbe(n_reps) = hcat([sample_parameters(n_lists, intercept_dist = intercept_dist) for _ in 1:n_reps]...)
+    sample_nbe(n_reps) = hcat([sample_parameters(n_lists; intercept_dist, beta_dist, gamma_dist) for _ in 1:n_reps]...)
     function simulate_nbe(θ, m)
         Z = Folds.map(eachcol(θ)) do params
             simulate_data(params, m, censoring_lower = censoring_lower, censoring_upper = censoring_upper, all_combinations = all_combinations, two_digit_numbers = two_digit_numbers)
@@ -503,8 +498,7 @@ function boundedsampleposterior(
     max_rounds::Integer = 20,
     kwargs...
 )
-    ## Rejection sampling from the approximate posterior truncated to the prior support: draw in rounds of
-    ## N until N draws are accepted or max_rounds is reached (fewer, possibly none, are then returned)
+    ## Rejection sampling from the approximate posterior truncated to the prior support
     accepted = Matrix{Float32}[]
     n_accepted = 0
     for _ in 1:max_rounds

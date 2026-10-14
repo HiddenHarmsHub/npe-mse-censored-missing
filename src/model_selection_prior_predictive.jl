@@ -1,7 +1,4 @@
-## Prior specification, induced model-size priors, prior-predictive summaries, and domain checks
-## locating the Silverman (system A) and King (system B) data within the training distribution.
-## Run locally: MS_RUN=<run> julia --project src/model_selection_prior_predictive.jl
-## The embedding check uses classifier replicate 1 when it has been trained, and is skipped otherwise.
+## Prior specification, induced model-size priors, prior-predictive summaries
 include("mse_functions.jl")
 include("model_selection_functions.jl")
 
@@ -34,27 +31,10 @@ for system in values(model_selection_systems), (name, prior) in all_priors
 end
 CSV.write(joinpath(output_path, "model_size_prior.csv"), DataFrame(size_rows))
 
-## ---- Data summaries computable from censored data, for simulations and real data alike ----
-function data_summaries(counts_obs, K)
-    cells = enumerate_all_combinations(K)
-    exact = counts_obs .>= 0
-    in_list(k) = [string(k) in split(c, ",") for c in cells]
-    singletons = [length(split(c, ",")) == 1 for c in cells]
-    total = sum(Float64, counts_obs[exact]; init = 0.0)  # cells can reach ~e^43, so integer sums overflow
-    return merge(
-        (total_exact = total, n_censored = count(.!exact), n_zero = count(==(0), counts_obs),
-         singleton_share = total == 0 ? NaN : sum(Float64, counts_obs[exact .& singletons]; init = 0.0) / total,
-         max_cell = maximum(counts_obs), log_total = log(total + 1)),
-        NamedTuple(Symbol("list_$k") => sum(Float64, counts_obs[exact .& in_list(k)]; init = 0.0) for k in 1:K),
-    )
-end
-
 real_data = Dict(
     "A" => (counts = load_silverman_data(), name = "Silverman"),
     "B" => (counts = load_king_counts(), name = "King"),
 )
-
-domain_flag(p) = 0.025 <= p <= 0.975 ? "within" : (0.005 <= p <= 0.995 ? "near boundary" : "outside")
 
 quantile_table, domain_rows = NamedTuple[], NamedTuple[]
 for s in ["A", "B"]
@@ -80,8 +60,7 @@ for s in ["A", "B"]
         push!(domain_rows, (system = s, data = real_data[s].name, check = String(k), observed = Float64(v), percentile = p, flag = domain_flag(p)))
     end
 
-    ## Nearest-neighbour distance in the classifier's learned summary space, relative to the
-    ## same distance for held-out prior-predictive datasets
+    ## Nearest-neighbour distance in the classifier's learned summary space
     config = try model_selection_config(system, run) catch; nothing end
     if !isnothing(config) && isfile(joinpath(models_path(config), classifier_filename(config, 1)))
         embed = load_classifier(config, 1).network[1:end-1]

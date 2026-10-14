@@ -8,15 +8,12 @@ using ForwardDiff, LinearAlgebra
 output_path = joinpath("output", "real_data_analysis")
 mkpath(output_path)
 
-## First analyse the Silverman data
-#silverman_data = Float32.(log.(load_silverman_data_6() .+ 1))
+## Silverman data
 silverman_data = Float32.(log.(load_silverman_data() .+ 1))
 
 ## First infer using NBE
 
-## Architectures chosen by the pre-specified rule in architecture_selection.jl (output/architecture_selection/
-## selected.csv: system A is 5 lists uncensored, B is 4 lists censored on [1, 4]). The rule scores the NPE grid;
-## the NBE uses the same trunk (width and number of hidden layers).
+## Architectures chosen by the pre-specified rule in architecture_selection.jl
 selected_architectures = CSV.read(joinpath("output", "architecture_selection", "selected.csv"), DataFrame)
 selected_architecture(system) = only(filter(:system => ==(system), selected_architectures))
 best_NBE_5 = best_NPE_5 = selected_architecture("A")
@@ -90,7 +87,7 @@ CSV.write(
     DataFrame(posterior_samples_silverman_npe', param_names(5))
 )
 
-##  MCMC on Silverman data
+## MCMC on Silverman data
 
 input_counts_silverman = load_silverman_data()
 X = one_hot_encode_parameters(5)
@@ -102,8 +99,7 @@ gamma_dist = Normal(0, 4)
 censoring_lower = 0
 censoring_upper = 0
 
-## Reference posterior with the validated NUTS stages used in the simulation study (run_reference_fit): a fit is
-## accepted only if it meets diagnostic_thresholds, otherwise it is refitted with the remediation stages
+## Reference posterior with the validated NUTS stages used in the simulation study (run_reference_fit)
 priors = (intercept_dist = intercept_dist, beta_dist = beta_dist, gamma_dist = gamma_dist)
 Random.seed!(2020)
 chains_silverman, _, fit_silverman = run_reference_fit(input_counts_silverman, X; censoring_lower, censoring_upper, priors...)
@@ -120,7 +116,7 @@ CSV.write(
 )
 
 
-## simulate from the posterior predictive 
+## simulate from the posterior predictive
 
 ppd_silverman = hcat([simulate_data(x, 1, censoring_lower=0, censoring_upper=0, log_transform = false) for x in eachcol(posterior_samples_silverman_npe)]...)
 ppd_silverman_df = DataFrame(ppd_silverman', ["N_$x" for x in replace.(enumerate_all_combinations(5), "," => "")]) 
@@ -131,11 +127,9 @@ CSV.write(
 
 
 
-########################
 #
 ## Now analyse King data
 #
-#########################
 
 
 
@@ -202,9 +196,7 @@ CSV.write(
     DataFrame(posterior_samples_king_npe', param_names(4))
 )
 
-## compare with mcmc
-## Raw counts with -1 for the suppressed cells. Recovering them from the Float32 log-counts with
-## floor(exp(.) - 1) loses 1 to rounding error (cell 23 became 11 instead of 12).
+## Raw counts with -1 for the suppressed cells
 input_counts = load_king_counts()
 X = one_hot_encode_parameters(4)
 
@@ -242,9 +234,7 @@ CSV.write(
 )
 
 
-## compute MLEs for both datasets
-## Best of several local optimisations: a deterministic start from weighted least squares on the log counts
-## (with a negligible ridge) plus random starts. A single random start can stop far from the maximum.
+## MLEs: best of several local optimisations
 function mle_estimates(counts, X, censoring_lower, censoring_upper, n_lists)
     neg_loglik(pars) = -likelihood_censored(counts, pars, X, censoring_lower, censoring_upper)
     n_pars = length(param_names(n_lists))

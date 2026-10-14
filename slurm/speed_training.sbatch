@@ -23,8 +23,7 @@ else
 fi
 "${JULIA[@]}" --version
 
-## One process with the same cores as a training worker in train_models.sbatch, so the times match how the
-## models were actually trained; BLAS uses the same number of threads
+## One process with the same cores as a training worker in train_models.sbatch
 export OPENBLAS_NUM_THREADS="${SLURM_CPUS_PER_TASK}"
 
 ## Times one full training run of the K=5 [0, 10] 256x3 NBE and NPE at the training budget in mse_functions.jl

@@ -1,14 +1,6 @@
-## Compare the model-selection runs (coefficient priors N(0, 4²), N(0, 2²), N(0, 1), and the original
-## N(0, 4²) networks against the same priors retrained with the new settings) side by side.
-## Reads each run's combined outputs (model_selection_combine.jl, model_selection_real_data.jl and
-## model_selection_prior_predictive.jl) and the training logs, for every run whose results exist, and
-## writes the tables to output/model_selection_comparison/.
-## Run locally: julia --project src/model_selection_compare_runs.jl
+## Compare the model-selection runs
 ##
-## Each run is calibrated against its own prior, so simulation coverage is not a ranking of priors. The
-## comparison answers: how sensitive are the real-data conclusions to the prior; how well does the neural
-## approximation match exact enumeration under each prior; how stable is training; and does each prior's
-## training distribution cover the real data.
+## Each run is calibrated against its own prior, so simulation coverage is not a ranking of priors.
 include("mse_functions.jl")
 include("model_selection_functions.jl")
 
@@ -23,10 +15,10 @@ read_if(file; kw...) = isfile(file) ? CSV.read(file, DataFrame; kw...) : nothing
 ## The ensemble (rep 0) where it exists, otherwise replicate 1
 preferred_rep(df) = 0 in df.rep ? 0 : 1
 tag(df, r) = (df.run .= r.run; df.prior .= prior_label(r); df)
-## Summaries of possibly empty groups (e.g. a reference dataset not in the evaluated part of the test set)
+## Summaries of possibly empty groups
 emedian(x) = isempty(x) ? missing : median(x)
 emean(x) = isempty(x) ? missing : mean(x)
-## Stack per-system tables, or nothing when a run has none yet (e.g. its real-data step has not run)
+## Stack per-system tables, or nothing when a run has none yet
 stack_systems(tables) = (t = filter(!isnothing, tables); isempty(t) ? nothing : vcat(t...; cols = :union))
 stack_runs(f) = vcat(filter(!isnothing, [f(r) for r in runs])...; cols = :union)
 

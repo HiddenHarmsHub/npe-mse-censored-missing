@@ -1,7 +1,4 @@
-## Simulation study for model selection and model averaging: fixed prior-predictive test sets for
-## systems A and B, evaluated with the oracle structure, all interactions, the MAP structure,
-## neural model averaging (primary and reweighted sensitivity priors) and the fixed-model NPE.
-## The run (priors and training settings) comes from MS_RUN; see model_selection_runs.
+## Simulation study for model selection and model averaging
 using Pkg; Pkg.activate(".")
 using Distributed, SlurmClusterManager
 addprocs(SlurmManager(); exeflags=["--threads", "1", "--project"])
@@ -10,8 +7,7 @@ addprocs(SlurmManager(); exeflags=["--threads", "1", "--project"])
 @everywhere include("model_selection_functions.jl")
 
 run = model_selection_run()
-## The ensemble (rep 0) and replicate 1 are evaluated on the full test set; further replicates with both
-## networks on its first 2,000 datasets, for training variability
+## The ensemble (rep 0) and replicate 1 are evaluated on the full test set
 n_evaluate(rep) = rep <= 1 ? 10_000 : 2000
 chunk_size = 100
 n_draws = 4000
@@ -40,15 +36,13 @@ end
 end
 
 ## Each task carries everything the worker needs, so no master-only globals are referenced.
-## The fixed-model NPE was trained under the original priors, so it is compared only in runs that use them.
 tasks = []
 for s in ["A", "B"]
     config = model_selection_config(model_selection_systems[s], run)
     for rep in vcat(0, paired_replicates(config))
     row = only(eachrow(filter(r -> r.n_lists == config.K && r.censoring_upper == config.censoring_upper, selected)))
     fixed_model_file = original_priors(run) ? joinpath("output", "models_npe", row.model_file) : nothing
-    ## The comparison model is optional: if it is missing (e.g. the base models were retrained under another
-    ## name), the other methods still run
+    ## The fixed-structure NPE is optional
     if !isnothing(fixed_model_file) && !isfile(fixed_model_file)
         @warn "Fixed-structure NPE $fixed_model_file not found; system $s is evaluated without it."
         fixed_model_file = nothing

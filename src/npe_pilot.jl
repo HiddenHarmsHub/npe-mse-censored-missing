@@ -1,7 +1,4 @@
 ## Pilot: does a larger training budget and flow improve NPE calibration?
-## Retrains the K=5, censoring [0, 10] NPE and evaluates it and the shipped model on the reference benchmark
-## datasets. Run locally from the repo root with e.g. julia --project -t 12 src/npe_pilot.jl
-## Needs output/test_data/test_data_5.bson and the combined reference results (combine_results.jl).
 include("mse_functions.jl")
 using Random
 
@@ -58,8 +55,7 @@ if !isfile(evaluation_file)
     CSV.write(evaluation_file, vcat(rows...))
 end
 
-## Calibration on non-capped datasets, accuracy of the hidden population, and agreement with validated NUTS
-## Cap flags come from the loaded test data, so the summary is right even if it differs from the cluster's
+## Calibration on non-capped datasets, accuracy of the hidden population
 evaluation = CSV.read(evaluation_file, DataFrame)
 evaluation.capped = [is_capped(Float64.(test_pars[:, d])) for d in evaluation.dataset]
 mcmc = CSV.read(joinpath("output", "mcmc_summary.csv"), DataFrame)

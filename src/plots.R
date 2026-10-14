@@ -293,7 +293,7 @@ comparison_df <- mcmc_df %>%
         values_to = "Value"
     )
 
-## 1. Accuracy against the simulated truth (all benchmark datasets, MCMC labelled by fit status)
+## Accuracy against the simulated truth
 point_estimates <- comparison_df %>%
     mutate(
         Metric = recode(
@@ -412,7 +412,7 @@ point_estimate_summaries <- bind_rows(
 write_csv(point_estimate_summaries, file.path("output", "point_estimate_summary.csv"))
 print(point_estimate_summaries)
 
-## 2. Approximation to the reference posterior: neural minus MCMC, validated fits only
+## Approximation to the reference posterior
 approximation_df <- comparison_df %>%
     filter(Metric == "error", status != "failed") %>%
     select(dataset, Method, median, lower_ci, upper_ci) %>%
@@ -459,7 +459,7 @@ approximation_df %>%
     ) %>%
     write_csv(file.path("output", "approximation_to_mcmc_summary.csv"))
 
-## 3. Algorithmic reliability of the reference samplers
+## Reliability of the reference samplers
 reliability_summary <- bind_rows(
     mcmc_diagnostics_df %>% mutate(Sampler = "NUTS"),
     irls_diagnostics_df %>% mutate(Sampler = "IRLS-MH")
@@ -589,8 +589,7 @@ ggsave(
     width = 10, height = 24, dpi = 300
 )
 
-## Trace plots for the worst and a random sample of validated NUTS fits, excluding datasets that hit the
-## simulator cap (their posteriors pile up at the intercept bound and they are excluded from calibration)
+## Trace plots for the worst and a random sample of validated NUTS fits
 set.seed(1)
 uncapped_diagnostics <- mcmc_diagnostics_df %>% filter(!capped)
 trace_datasets <- c(
@@ -622,8 +621,7 @@ ggsave(
     plot = trace_plot, width = 12, height = 7, dpi = 300
 )
 
-## speed benchmarking
-## Only the datasets selected by speed_comparisons.jl (datasets.csv); the folder may hold timings of others
+## Speed benchmarking
 speed_datasets <- read_csv(file.path("output", "speed_comparisons", "datasets.csv"), show_col_types = FALSE)$dataset
 benchmark_files <- file.path("output", "speed_comparisons", paste0("speed_comparison_dataset_", speed_datasets, ".csv"))
 
