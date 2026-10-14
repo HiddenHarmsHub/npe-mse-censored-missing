@@ -1,19 +1,23 @@
 ## Reference posterior model probabilities by enumerating every interaction structure and
 ## estimating each marginal likelihood p(y | m) by importance sampling around the Laplace mode.
 ## Include after mse_functions.jl, mcmc_functions.jl and model_selection_functions.jl.
+using Optim
 
 ## Log marginal likelihood of structure `mask`, integrating over the active parameters only.
 ## The data-only constants dropped by likelihood_censored are the same for every structure, so
 ## they cancel in the posterior model probabilities. Returns resampled draws on the full
 ## (effective) parameter vector, with zeros for inactive interactions.
-function log_evidence(counts, mask; censoring_lower = 0, censoring_upper = 0, priors = coefficient_priors(), n_draws = 50_000, n_keep = 500, ν = 4, scale = 1.5, pilot_draws = nothing, rng = Random.default_rng())
+## `X` replaces the corner-point design (one column per parameter of the full model) and `M` maps the
+## draws back to corner-point parameters; both are used for the sum-to-zero g-priors below.
+function log_evidence(counts, mask; censoring_lower = 0, censoring_upper = 0, priors = coefficient_priors(), n_draws = 50_000, n_keep = 500, ν = 4, scale = 1.5, pilot_draws = nothing, X = nothing, M = nothing, rng = Random.default_rng())
     K = Int(log2(length(counts) + 1))
     active = vcat(trues(1 + K), mask)
-    Xm = one_hot_encode_parameters(K)[:, active]
+    Xm = (isnothing(X) ? one_hot_encode_parameters(K) : X)[:, active]
     is = importance_reference(counts, Xm; censoring_lower, censoring_upper, priors..., n_draws, ν, scale, pilot_draws, K, rng)
     keep = rand(rng, Categorical(is.weights), n_keep)
     θ = zeros(Float32, length(active), n_keep)
     θ[active, :] = is.draws[:, keep]
+    isnothing(M) || (θ = Float32.(M * θ))
     return (log_evidence = is.log_evidence, log_evidence_se = is.log_evidence_se, ess = is.ess, θ = θ)
 end
 
@@ -54,4 +58,83 @@ end
 function reference_model_average(counts, system; model_prior = primary_model_prior, priors = coefficient_priors(), n_draws = 50_000, n_keep = 500, B = 4000, rng = Random.default_rng())
     fits = reference_evidences(counts, system; priors, n_draws, n_keep, rng)
     return reference_mixture(fits, counts, system; model_prior, B, rng)
+end
+
+## Maximum likelihood fit of one structure, with a Wald interval for λ0 and the information criteria.
+## N adds λ0 and, for each censored cell, its fitted mean truncated to the censoring interval.
+## The likelihood omits data-only constants that are the same for every structure, so AIC and BIC
+## differences across structures are exact. BIC is given with two sample sizes: the number of observable
+## cells (2^K - 1, as in King et al. 2021) and the number of observed individuals.
+function fit_mle(counts, mask; censoring_lower = 0, censoring_upper = 0, priors = coefficient_priors())
+    K = Int(log2(length(counts) + 1))
+    Xm = one_hot_encode_parameters(K)[:, vcat(trues(1 + K), mask)]
+    negloglik(θ) = -likelihood_censored(counts, θ, Xm, censoring_lower, censoring_upper)
+    start = log_count_start(counts, Xm, censoring_lower, censoring_upper, priors...; K)
+    result = Optim.optimize(negloglik, start, Optim.LBFGS(), Optim.Options(iterations = 10_000, g_tol = 1e-9); autodiff = :forward)
+    θ̂ = Optim.minimizer(result)
+    H = ForwardDiff.hessian(negloglik, θ̂)
+    se = isposdef(Symmetric(H)) ? sqrt(inv(Symmetric(H))[1, 1]) : NaN
+    censored_mean(η) = (k = censoring_lower:censoring_upper; l = k .* η .- logfactorial.(k); w = exp.(l .- maximum(l)); sum(k .* w) / sum(w))
+    N̂ = exp(θ̂[1]) + sum(counts[counts .>= 0]) + sum(censored_mean(η) for η in Xm[counts .== -1, :] * θ̂; init = 0.0)
+    loglik, p = -Optim.minimum(result), length(θ̂)
+    return (N = N̂, converged = Optim.converged(result), alpha = θ̂[1], alpha_se = se, lambda0 = exp(θ̂[1]),
+            lambda0_lower = exp(θ̂[1] - 1.96se), lambda0_upper = exp(θ̂[1] + 1.96se), min_coefficient = minimum(θ̂[2:end]),
+            n_parameters = p, loglik = loglik, AIC = 2p - 2loglik, BIC_cells = log(length(counts)) * p - 2loglik,
+            BIC_individuals = log(sum(counts[counts .>= 0])) * p - 2loglik)
+end
+
+## ---- g-priors (prior sensitivity) ----
+## The default priors of conting (Overstall and King 2014): sum-to-zero coding z = 2x - 1 over the full 2^K
+## table, so X'X = 2^K I and the g-prior θ_m | σ² ~ N(0, σ² n (X_m'X_m)^{-1}) is N(0, σ² I): iid N(0, σ²) on
+## every sum-to-zero main effect u_i and interaction u_ij, with a flat intercept. σ² = 1 is the unit-information
+## prior (Ntzoufras et al. 2003); the Sabanés Bové and Held (2011) hyper-g prior puts σ² ~ IG(a, b), conting's
+## default being shape = scale = 0.001 / 2.
+## We keep α = log λ0 as the intercept (a flat sum-to-zero intercept gives a flat α), with its Uniform(1, 10)
+## support, and write the cells in (α, u): η_x = α + Σ u_i (z_i + 1) + Σ u_ij (z_i z_j - 1). In corner-point
+## terms γ_ij = 4 u_ij and β_i = 2 u_i - 2 Σ_j u_ij over the active interactions of list i, so the
+## unit-information prior has γ ~ N(0, 4²), the scale of the primary prior, with correlated main effects.
+function sum_to_zero_map(K)
+    pairs = enumerate_two_digit_numbers(K)
+    M = zeros(1 + K + length(pairs), 1 + K + length(pairs))
+    M[1, 1] = 1
+    for i in 1:K
+        M[1+i, 1+i] = 2
+    end
+    for (j, (a, b)) in enumerate(pairs)
+        M[1+K+j, 1+K+j] = 4
+        M[1+a, 1+K+j] = M[1+b, 1+K+j] = -2
+    end
+    return M  # corner-point θ = M u, for u with inactive interactions set to zero
+end
+
+gprior_priors(σ²) = (intercept_dist = Uniform(1, 10), beta_dist = Normal(0, sqrt(σ²)), gamma_dist = Normal(0, sqrt(σ²)))
+
+## Log evidences of every structure under the g-prior with fixed σ²; draws are returned as corner-point θ
+function gprior_evidences(counts, system, σ²; n_draws = 50_000, n_keep = 500, rng = Random.default_rng())
+    K = system.K
+    M = sum_to_zero_map(K)
+    X = one_hot_encode_parameters(K) * M
+    return [log_evidence(counts, model_mask(c, K); system.censoring_lower, system.censoring_upper, priors = gprior_priors(σ²),
+                         n_draws, n_keep, X, M, rng) for c in 1:n_models(K)]
+end
+
+## Hyper-g: integrate the evidence over τ = log σ² with σ² ~ IG(a, b). The log evidence is computed on a grid of
+## τ and interpolated linearly; beyond the grid it is extended with the slope of its last two points (for large
+## σ² the evidence falls as σ^-p, p the number of normal-prior parameters), and the integral is truncated where
+## the prior and evidence make the remainder negligible. Returns, per structure, the log evidence and the
+## posterior weights of the grid points, used to mix the per-σ² draws.
+function hyper_g_evidence(log_ev_grid, τ_grid; a = 5e-4, b = 5e-4, τ_max = 3000.0, step = 0.05)
+    log_prior_τ(τ) = a * log(b) - Distributions.loggamma(a) - a * τ - b * exp(-τ)
+    slope = (log_ev_grid[end] - log_ev_grid[end-1]) / (τ_grid[end] - τ_grid[end-1])
+    τ_fine = collect(τ_grid[1]:step:τ_max)
+    interp(τ) = τ <= τ_grid[end] ? (k = clamp(searchsortedlast(τ_grid, τ), 1, length(τ_grid) - 1);
+                                    w = (τ - τ_grid[k]) / (τ_grid[k+1] - τ_grid[k]); (1 - w) * log_ev_grid[k] + w * log_ev_grid[k+1]) :
+                                   log_ev_grid[end] + min(slope, 0.0) * (τ - τ_grid[end])
+    l = [interp(τ) + log_prior_τ(τ) for τ in τ_fine]
+    m = maximum(l)
+    log_evidence = m + log(sum(exp.(l .- m)) * step)
+    ## weight of each grid point: the posterior mass of τ nearest to it (the extension goes to the last point)
+    nearest = [argmin(abs.(τ_grid .- min(τ, τ_grid[end]))) for τ in τ_fine]
+    w = [sum(exp.(l[nearest .== k] .- m)) for k in eachindex(τ_grid)]
+    return (log_evidence = log_evidence, grid_weights = w ./ sum(w), tail_slope = slope)
 end

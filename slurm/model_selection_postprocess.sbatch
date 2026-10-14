@@ -3,7 +3,7 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=1
 #SBATCH --mem-per-cpu=16G
-#SBATCH --time=04:00:00
+#SBATCH --time=12:00:00
 #SBATCH --output=logs/%x_%j.out
 #SBATCH --mail-type=ALL
 #SBATCH --mail-user=j.s.marsh@bham.ac.uk
@@ -24,11 +24,13 @@ export MS_RUN="${1:-b4_g4}"
 echo "Model-selection run: ${MS_RUN}"
 
 ## Single-process steps for the run in MS_RUN: domain checks (with the embedding check now that classifiers
-## exist), summary tables, the real-data reanalysis, the comparison across every run with results so far,
-## and figures if R is available
+## exist), summary tables, parameter calibration of the conditional NPE, the real-data reanalysis, the local
+## checks near the real data, the comparison across every run with results so far, and figures if R is available
 julia --project src/model_selection_prior_predictive.jl
 julia --project src/model_selection_combine.jl
+julia --project src/model_selection_parameter_calibration.jl
 julia --project src/model_selection_real_data.jl
+julia --project src/model_selection_local_checks.jl
 julia --project src/model_selection_compare_runs.jl
 if command -v Rscript > /dev/null; then
     Rscript src/model_selection_plots.R

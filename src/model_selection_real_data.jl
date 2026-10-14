@@ -24,7 +24,9 @@ n_ppc_draws = 4000
 ##     NG*GP, PF*GP, LA*PF, GO*GP, NG*GO; N = 11,313, 95% profile CI [9,918, 13,046].
 ##   - Silverman (2020), Table 15: Bayesian fit with N(0, 1) interaction priors, thresholding at 2 (Table 10:
 ##     median 13.2K, 95% 11.7K-15.1K) and at 5, which keeps only LA:NG (median 14.1K, 95% 12.6K-16.0K).
-## King: the structure King et al. selected by AIC and BIC for the censored four-list data.
+## King: King, Rodriguez de Rivera Ortega and McCrea (2021, SIS book of short papers), Table 2: the structure selected
+##   by AIC and BIC under the interval-censored likelihood, N = 3,060, 95% bootstrap CI [1,583, 3,858]. Their BIC
+##   uses n = 15 cells (BIC_cells in the all-structures table).
 literature_models = Dict(
     "A" => Dict(
         "Home Office stepwise AIC (Silverman 2014)" => ["12", "13", "24", "25", "35", "45"],
@@ -166,23 +168,17 @@ for s in ["A", "B"]
          prob_in_censoring_interval = system.censoring_upper > 0 ? mean(system.censoring_lower .<= replicated[i, :] .<= system.censoring_upper) : missing)
         for (i, cell) in enumerate(enumerate_all_combinations(K))]))
 
-    ## ---- MLE under the MAP, all-interactions and literature structures (Wald intervals on α) ----
-    mle_rows = NamedTuple[]
-    for (name, mask) in sort(collect(conditional), by = first)
-        Xm = X[:, vcat(trues(1 + K), mask)]
-        negloglik(θ) = -likelihood_censored(counts_obs, θ, Xm, system.censoring_lower, system.censoring_upper)
-        start = log_count_start(counts_obs, Xm, system.censoring_lower, system.censoring_upper, coefficient_priors(run)...; K)
-        result = optimize(negloglik, start, BFGS(), autodiff = :forward)
-        θ̂ = Optim.minimizer(result)
-        H = ForwardDiff.hessian(negloglik, θ̂)
-        se = isposdef(Symmetric(H)) ? sqrt(inv(Symmetric(H))[1, 1]) : NaN
-        ## N adds λ0 and, for each censored cell, its fitted mean truncated to the censoring interval
-        censored_mean(η) = (k = system.censoring_lower:system.censoring_upper; w = exp.(k .* η .- logfactorial.(k) .- maximum(k .* η .- logfactorial.(k))); sum(k .* w) / sum(w))
-        N̂ = exp(θ̂[1]) + sum(counts_obs[counts_obs .>= 0]) + sum(censored_mean(η) for η in Xm[counts_obs .== -1, :] * θ̂; init = 0.0)
-        push!(mle_rows, (structure = name, interactions = labels[model_index(mask)], N = N̂, converged = Optim.converged(result), alpha = θ̂[1], alpha_se = se,
-                         lambda0 = exp(θ̂[1]), lambda0_lower = exp(θ̂[1] - 1.96se), lambda0_upper = exp(θ̂[1] + 1.96se),
-                         min_coefficient = minimum(θ̂[2:end])))
+    ## ---- MLE of every structure, with AIC and BIC; the MAP, all-interactions and literature structures
+    ## are also written separately (Wald intervals on α) ----
+    mle = DataFrame([merge((model = c, interactions = labels[c]),
+                           fit_mle(counts_obs, model_mask(c, K); system.censoring_lower, system.censoring_upper, priors = coefficient_priors(run)))
+                     for c in 1:n_models(K)])
+    for ic in (:AIC, :BIC_cells, :BIC_individuals)
+        mle[!, Symbol("delta_", ic)] = mle[!, ic] .- minimum(mle[!, ic])
+        mle[!, Symbol("rank_", ic)] = invperm(sortperm(mle[!, ic]))
     end
+    CSV.write(joinpath(output_path, "$(s)_mle_all_structures.csv"), mle)
+    mle_rows = [merge((structure = name,), NamedTuple(mle[model_index(mask), Not(:model)])) for (name, mask) in sort(collect(conditional), by = first)]
     CSV.write(joinpath(output_path, "$(s)_mle.csv"), DataFrame(mle_rows))
     println(population)
 end

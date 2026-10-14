@@ -332,3 +332,32 @@ end
     @test all(isfinite, mode5) && all(isfinite, L5)
     @test isfinite(log_evidence(y5, model_mask(41, 5); n_draws = 2000).log_evidence)
 end
+
+@testset "g-priors and MLE" begin
+    ## Sum-to-zero map: corner-point cell means equal α + Σ u_i (z_i + 1) + Σ u_ij (z_i z_j - 1)
+    K = 4
+    mask = model_mask(37, K)
+    u = randn(1 + K + 6)
+    u[end-5:end] .*= mask
+    M = sum_to_zero_map(K)
+    η = map(enumerate_all_combinations(K)) do cell
+        z = 2 .* [string(i) in split(cell, ",") for i in 1:K] .- 1
+        u[1] + sum(u[1+i] * (z[i] + 1) for i in 1:K) + sum(u[1+K+j] * (z[a] * z[b] - 1) for (j, (a, b)) in enumerate(enumerate_two_digit_numbers(K)))
+    end
+    @test one_hot_encode_parameters(K) * (M * u) ≈ η
+    ## Over the full 2^K table the sum-to-zero columns are orthogonal with X'X = 2^K I
+    Z = reduce(vcat, [[1; z; [z[a] * z[b] for (a, b) in enumerate_two_digit_numbers(K)]]' for z in ([2 .* digits(c, base = 2, pad = K) .- 1 for c in 0:2^K-1])])
+    @test Z' * Z == 2^K * I
+
+    ## Hyper-g: with a flat log-evidence the integral is the prior mass over the grid, plus a tail
+    h = hyper_g_evidence(zeros(5), collect(-2.0:1.0:2.0))
+    @test h.log_evidence < 0 && sum(h.grid_weights) ≈ 1
+
+    ## MLE: AIC and BIC are consistent with the log-likelihood and the number of parameters
+    y = load_king_counts()
+    fit = fit_mle(y, Bool[1, 1, 1, 1, 0, 1]; censoring_lower = 1, censoring_upper = 4)
+    @test fit.converged
+    @test fit.AIC ≈ 2 * fit.n_parameters - 2 * fit.loglik
+    @test fit.BIC_cells - fit.AIC ≈ (log(15) - 2) * fit.n_parameters
+    @test abs(fit.N - 3060) < 10  # King et al. (2021), Table 2: 3,060 for {12, 13, 14, 23, 34}
+end
