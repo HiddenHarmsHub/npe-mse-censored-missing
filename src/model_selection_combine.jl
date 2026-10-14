@@ -11,11 +11,18 @@ output_path = model_selection_output_path(run)
 read_all(dir, pattern) = vcat([CSV.read(joinpath(dir, f), DataFrame) for f in readdir(dir) if occursin(pattern, f)]...; cols = :union)
 
 ## ---- Simulation study ----
+## Without the per-chunk folder (it is not copied from the cluster by default) the combined CSVs are reused
 sim_path = joinpath(output_path, "simulation")
-models = read_all(sim_path, r"_models\.csv$")
-posteriors = read_all(sim_path, r"_posteriors\.csv$")
-CSV.write(joinpath(output_path, "simulation_models.csv"), models)
-CSV.write(joinpath(output_path, "simulation_posteriors.csv"), posteriors)
+if isdir(sim_path) && !isempty(readdir(sim_path))
+    models = read_all(sim_path, r"_models\.csv$")
+    posteriors = read_all(sim_path, r"_posteriors\.csv$")
+    CSV.write(joinpath(output_path, "simulation_models.csv"), models)
+    CSV.write(joinpath(output_path, "simulation_posteriors.csv"), posteriors)
+else
+    println("No per-chunk simulation results; using the combined simulation_models.csv and simulation_posteriors.csv")
+    models = CSV.read(joinpath(output_path, "simulation_models.csv"), DataFrame)
+    posteriors = CSV.read(joinpath(output_path, "simulation_posteriors.csv"), DataFrame)
+end
 
 ## Rows with no posterior draws inside the intercept support have NaN metrics; they are counted and left out
 ## of the summaries. Results from before the n_draws column existed always had draws.
@@ -34,6 +41,24 @@ valid.intercept_band = clamp.(floor.(Int, (valid.intercept .- 1) ./ 1.8), 0, 4)
 valid = transform(groupby(valid, :system), :entropy => (e -> searchsortedfirst.(Ref(quantile(e, [1/3, 2/3])), e)) => :entropy_tercile)
 levels = round.(Int, 100 .* coverage_levels)
 
+## Interaction strength. |γ| bands for single interactions, and per dataset the weakest and strongest active
+## interaction ("none" for the no-interaction structure). The weakest one limits structure recovery.
+## The true coefficients come from the test sets (model_selection_test_data.jl regenerates them exactly).
+gamma_band(g) = g < 0.5 ? "a: <0.5" : g < 1 ? "b: 0.5-1" : g < 2 ? "c: 1-2" : g < 4 ? "d: 2-4" : "e: >=4"
+test_sets = Dict(s => BSON.load(model_selection_test_file(run, sys)) for (s, sys) in model_selection_systems if isfile(model_selection_test_file(run, sys)))
+function active_gammas(s, i)
+    t, K = test_sets[s], model_selection_systems[s].K
+    return abs.(Float64.(t[:pars][(2+K):end, i]))[Bool.(t[:masks][:, i])]
+end
+strength_strata = Symbol[]
+if length(test_sets) == length(unique(valid.system))
+    valid.weakest_gamma = [(g = active_gammas(r.system, r.dataset); isempty(g) ? "none" : gamma_band(minimum(g))) for r in eachrow(valid)]
+    valid.strongest_gamma = [(g = active_gammas(r.system, r.dataset); isempty(g) ? "none" : gamma_band(maximum(g))) for r in eachrow(valid)]
+    strength_strata = [:weakest_gamma, :strongest_gamma]
+else
+    @warn "Test sets not found; skipping the interaction-strength strata. Run src/model_selection_test_data.jl for this run first."
+end
+
 ## Structure posterior: scores, recovery and credible-set coverage, overall and by true model size
 structure_summary(df) = combine(df,
     nrow => :n, :log_score => mean => :log_score, :prob_true => mean => :prob_true,
@@ -42,6 +67,7 @@ structure_summary(df) = combine(df,
     [Symbol("in_set_$L") => mean => Symbol("set_coverage_$L") for L in levels]...)
 CSV.write(joinpath(output_path, "structure_summary.csv"), structure_summary(groupby(valid, [:system, :rep])))
 CSV.write(joinpath(output_path, "structure_by_size.csv"), structure_summary(groupby(valid, [:system, :rep, :true_size])))
+isempty(strength_strata) || CSV.write(joinpath(output_path, "structure_by_strength.csv"), structure_summary(groupby(valid, [:system, :rep, :weakest_gamma])))
 
 ## Reliability of inclusion probabilities (10 equal-width bins) and of model-size probabilities
 reliability = NamedTuple[]
@@ -65,12 +91,33 @@ for g in groupby(valid, [:system, :rep])
     end
 end
 CSV.write(joinpath(output_path, "inclusion_reliability.csv"), DataFrame(reliability))
+
+## Inclusion probability of each interaction by its true |γ| (inactive interactions as their own band):
+## how strong an interaction must be before the classifier detects it
+if !isempty(strength_strata)
+    strength = NamedTuple[]
+    for g in groupby(valid, [:system, :rep])
+        s, K = g.system[1], model_selection_systems[g.system[1]].K
+        t = test_sets[s]
+        pairs = ["$(a)$(b)" for (a, b) in enumerate_two_digit_numbers(K)]
+        p = reduce(vcat, [g[!, "incl_$q"] for q in pairs])
+        active = reduce(vcat, [Bool.(t[:masks][j, g.dataset]) for j in eachindex(pairs)])
+        band = reduce(vcat, [gamma_band.(abs.(Float64.(t[:pars][1+K+j, g.dataset]))) for j in eachindex(pairs)])
+        band[.!active] .= "inactive"
+        for b in sort(unique(band))
+            idx = band .== b
+            push!(strength, (system = s, rep = g.rep[1], gamma_band = b, n = count(idx), mean_inclusion = mean(p[idx]),
+                             share_above_50 = mean(p[idx] .> 0.5), se = std(p[idx]) / sqrt(count(idx))))
+        end
+    end
+    CSV.write(joinpath(output_path, "inclusion_by_strength.csv"), DataFrame(strength))
+end
 CSV.write(joinpath(output_path, "size_calibration.csv"), DataFrame(size_calibration))
 
 ## Population inference. Coverage under a sensitivity prior p' reweights the primary-prior test set
 ## by p'(m) / p(m) of the true structure, which is exact importance weighting over structures.
 joined = innerjoin(posteriors, select(valid, :dataset, :system, :rep, :true_size, :intercept_band, :entropy_tercile, :truth_is_map,
-                                       :n_censored, :n_zero, r"^logw_"), on = [:dataset, :system, :rep])
+                                       :n_censored, :n_zero, strength_strata..., r"^logw_"), on = [:dataset, :system, :rep])
 weighted_mean(x, w) = sum(x .* w) / sum(w)
 function population_summary(df, w)
     return (n = nrow(df), mean_error = weighted_mean(df.error, w), median_error = median(df.error),
@@ -87,7 +134,7 @@ end
 CSV.write(joinpath(output_path, "population_summary.csv"), DataFrame(summary_rows))
 
 stratum_rows = NamedTuple[]
-for stratum in [:true_size, :intercept_band, :entropy_tercile, :truth_is_map, :n_censored, :n_zero]
+for stratum in [:true_size, :intercept_band, :entropy_tercile, :truth_is_map, :n_censored, :n_zero, strength_strata...]
     for g in groupby(filter(:quantity => in(["N0", "N"]), joined), [:system, :rep, :method, :quantity, stratum])
         push!(stratum_rows, merge((system = g.system[1], rep = g.rep[1], method = g.method[1], quantity = g.quantity[1],
                                    stratum = String(stratum), level = string(g[1, stratum])), population_summary(g, ones(nrow(g)))))

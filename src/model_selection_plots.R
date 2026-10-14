@@ -64,6 +64,46 @@ if (file.exists(structure_file)) {
     save_figure(p, "model_selection_credible_sets.png", height = 4.2)
 }
 
+## ---- Inclusion probability by true interaction strength ----
+strength_file <- file.path(input_dir, "inclusion_by_strength.csv")
+if (file.exists(strength_file)) {
+    strength <- read_csv(strength_file, show_col_types = FALSE)
+    strength <- strength |>
+        filter(rep == plot_rep(strength)) |>
+        mutate(
+            band = factor(str_remove(gamma_band, "^[a-e]: "), levels = c("inactive", "<0.5", "0.5-1", "1-2", "2-4", ">=4")),
+            system = system_labels[system]
+        )
+    p <- ggplot(strength, aes(band, mean_inclusion)) +
+        geom_linerange(aes(ymin = mean_inclusion - 2 * se, ymax = mean_inclusion + 2 * se), colour = "#2a78d6", linewidth = 0.6) +
+        geom_point(colour = "#2a78d6", size = 2) +
+        facet_wrap(~system) +
+        scale_y_continuous(limits = c(0, 1)) +
+        labs(x = "True |γ| of the interaction", y = "Mean posterior inclusion probability")
+    save_figure(p, "model_selection_inclusion_by_strength.png", height = 4)
+}
+
+## ---- Conditional NPE parameter calibration (SBC ranks given the true structure) ----
+## ECDF of the ranks minus the uniform CDF, with the 95% Kolmogorov–Smirnov band, for the selected replicate
+ranks_file <- file.path(input_dir, "parameter_calibration_ranks.csv")
+if (file.exists(ranks_file)) {
+    ranks <- read_csv(ranks_file, show_col_types = FALSE) |> filter(selected)
+    grid <- seq(0, 1, length.out = 101)
+    role_labels <- c(alpha = "α", beta = "β (main effects)", `gamma active` = "γ, active interactions", `gamma inactive` = "γ, inactive interactions")
+    ecdf_diff <- ranks |>
+        group_by(system, role) |>
+        reframe(u = grid, diff = ecdf(rank)(grid) - grid, band = 1.358 / sqrt(n())) |>
+        mutate(system = system_labels[system], role = factor(role_labels[role], levels = role_labels))
+    p <- ggplot(ecdf_diff, aes(u, diff)) +
+        geom_ribbon(aes(ymin = -band, ymax = band), fill = "grey85") +
+        geom_hline(yintercept = 0, colour = "grey50") +
+        geom_line(colour = "#2a78d6", linewidth = 0.7) +
+        facet_grid(system ~ role, labeller = labeller(system = label_wrap_gen(18))) +
+        scale_x_continuous(breaks = c(0, 0.5, 1), labels = c("0", "0.5", "1")) +
+        labs(x = "Fractional rank of the true value", y = "ECDF minus uniform")
+    save_figure(p, "model_selection_parameter_calibration.png", width = 9, height = 5)
+}
+
 ## ---- Coverage of N0 and N intervals by method ----
 population_file <- file.path(input_dir, "population_summary.csv")
 if (file.exists(population_file)) {

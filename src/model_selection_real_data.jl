@@ -18,10 +18,22 @@ n_reference_draws = 100_000
 n_ppc_draws = 4000
 
 ## Interaction structures from the literature to fit conditionally, as lists of pairs such as "12".
-## These are left for the authors to fill in (e.g. the structure selected by Silverman, 2020).
+## UK lists: 1 LA (local authorities), 2 NG (NGOs), 3 PF (police forces and the NCA), 4 GO (government
+## organisations), 5 GP (general public); the counts match Table 1 of Silverman (2014) exactly.
+##   - Silverman (2014) / Bales et al. (2015), the Home Office analysis: stepwise AIC in Rcapture, keeping LA*NG,
+##     NG*GP, PF*GP, LA*PF, GO*GP, NG*GO; N = 11,313, 95% profile CI [9,918, 13,046].
+##   - Silverman (2020), Table 15: Bayesian fit with N(0, 1) interaction priors, thresholding at 2 (Table 10:
+##     median 13.2K, 95% 11.7K-15.1K) and at 5, which keeps only LA:NG (median 14.1K, 95% 12.6K-16.0K).
+## King: the structure King et al. selected by AIC and BIC for the censored four-list data.
 literature_models = Dict(
-    "A" => Dict{String, Vector{String}}(),
-    "B" => Dict{String, Vector{String}}(),
+    "A" => Dict(
+        "Home Office stepwise AIC (Silverman 2014)" => ["12", "13", "24", "25", "35", "45"],
+        "Silverman (2020) threshold 2" => ["12", "13", "25", "35"],
+        "Silverman (2020) threshold 5" => ["12"],
+    ),
+    "B" => Dict(
+        "King et al. AIC/BIC" => ["12", "13", "14", "23", "34"],
+    ),
 )
 
 output_path = joinpath(model_selection_output_path(run), "real_data")
@@ -104,7 +116,16 @@ for s in ["A", "B"]
                        ["literature: $n" => mask_from_pairs(p, K) for (n, p) in literature_models[s]]...)
     for (name, mask) in conditional
         append!(rows, population_rows("neural_conditional: $name", sample_conditional_population(cnpe_ensemble, y, mask, n_draws, system; counts_obs)))
+        ## Exact posterior under the structure alone, resampled from its importance-sampling draws
+        θ_ref = fits[model_index(mask)].θ
+        append!(rows, population_rows("reference_conditional: $name", population_draws(θ_ref[:, rand(1:size(θ_ref, 2), n_draws)], counts_obs; system.censoring_lower, system.censoring_upper)))
     end
+    ## Posterior probability and rank of each conditional structure, neural and exact
+    rank_of(π, c) = findfirst(==(c), sortperm(π, rev = true))
+    CSV.write(joinpath(output_path, "$(s)_conditional_structures.csv"), DataFrame([
+        (name = name, structure = labels[model_index(mask)], neural_prob = π_ensemble[model_index(mask)], neural_rank = rank_of(π_ensemble, model_index(mask)),
+         reference_prob = reference["primary"].π[model_index(mask)], reference_rank = rank_of(reference["primary"].π, model_index(mask)))
+        for (name, mask) in conditional]))
     ## The fixed-model NPE was trained under the original priors, so it is compared only in runs that use them
     row = only(eachrow(filter(r -> r.n_lists == K && r.censoring_upper == system.censoring_upper, selected)))
     fixed_file = joinpath("output", "models_npe", row.model_file)
@@ -145,9 +166,9 @@ for s in ["A", "B"]
          prob_in_censoring_interval = system.censoring_upper > 0 ? mean(system.censoring_lower .<= replicated[i, :] .<= system.censoring_upper) : missing)
         for (i, cell) in enumerate(enumerate_all_combinations(K))]))
 
-    ## ---- MLE under the MAP and all-interactions structures (Wald intervals on α) ----
+    ## ---- MLE under the MAP, all-interactions and literature structures (Wald intervals on α) ----
     mle_rows = NamedTuple[]
-    for (name, mask) in [("MAP ($(labels[map_index]))", model_mask(map_index, K)), ("all interactions", trues(J))]
+    for (name, mask) in sort(collect(conditional), by = first)
         Xm = X[:, vcat(trues(1 + K), mask)]
         negloglik(θ) = -likelihood_censored(counts_obs, θ, Xm, system.censoring_lower, system.censoring_upper)
         start = log_count_start(counts_obs, Xm, system.censoring_lower, system.censoring_upper, coefficient_priors(run)...; K)
@@ -155,7 +176,10 @@ for s in ["A", "B"]
         θ̂ = Optim.minimizer(result)
         H = ForwardDiff.hessian(negloglik, θ̂)
         se = isposdef(Symmetric(H)) ? sqrt(inv(Symmetric(H))[1, 1]) : NaN
-        push!(mle_rows, (structure = name, converged = Optim.converged(result), alpha = θ̂[1], alpha_se = se,
+        ## N adds λ0 and, for each censored cell, its fitted mean truncated to the censoring interval
+        censored_mean(η) = (k = system.censoring_lower:system.censoring_upper; w = exp.(k .* η .- logfactorial.(k) .- maximum(k .* η .- logfactorial.(k))); sum(k .* w) / sum(w))
+        N̂ = exp(θ̂[1]) + sum(counts_obs[counts_obs .>= 0]) + sum(censored_mean(η) for η in Xm[counts_obs .== -1, :] * θ̂; init = 0.0)
+        push!(mle_rows, (structure = name, interactions = labels[model_index(mask)], N = N̂, converged = Optim.converged(result), alpha = θ̂[1], alpha_se = se,
                          lambda0 = exp(θ̂[1]), lambda0_lower = exp(θ̂[1] - 1.96se), lambda0_upper = exp(θ̂[1] + 1.96se),
                          min_coefficient = minimum(θ̂[2:end])))
     end
