@@ -1,0 +1,7 @@
+component,prior
+intercept α,"Uniform{Float64}(a=1.0, b=10.0)"
+main effects β_k,"Normal{Float64}(μ=0.0, σ=1.0)"
+interactions γ_kl (latent),"Normal{Float64}(μ=0.0, σ=1.0)"
+structure m (primary),"ρ ~ Beta(1, 1), m_kl | ρ ~ Bernoulli(ρ)"
+structure m (sparse),"ρ ~ Beta(1, 3), m_kl | ρ ~ Bernoulli(ρ)"
+structure m (uniform),m_kl ~ Bernoulli(0.5)

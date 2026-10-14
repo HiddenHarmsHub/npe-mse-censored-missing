@@ -1,0 +1,4 @@
+name,structure,neural_prob,neural_rank,reference_prob,reference_rank
+all interactions,"12,13,14,23,24,34",0.038599787625615174,5,0.0871467611683683,3
+MAP (none),none,0.22250652151358122,1,0.010970543740179497,20
+literature: King et al. AIC/BIC,"12,13,14,23,34",0.002751009271319579,54,0.014413572237251633,17
