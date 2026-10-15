@@ -1,0 +1,35 @@
+system,scenario,label,group,censoring_lower,censoring_upper,censoring_min_lists
+A,S0,In distribution,in distribution,0,0,1
+A,S1,"Small population, α ~ U(1, 3)",parameter shift,0,0,1
+A,S2,"Large population, α ~ U(8.5, 10)",parameter shift,0,0,1
+A,S3,"Large lists, β ~ N(2, 1)",parameter shift,0,0,1
+A,S4a,"Moderate effects, β, γ ~ N(0, 2²)",parameter shift,0,0,1
+A,S4b,"Weak effects, β, γ ~ N(0, 1)",parameter shift,0,0,1
+A,S5,"Strong effects, β, γ ~ N(0, 8²)",parameter shift,0,0,1
+A,S6,Exact-zero interactions,parameter shift,0,0,1
+A,S7,Empty overlap between two lists,parameter shift,0,0,1
+A,S8a,"Low capture, β ~ N(-3, 1)",parameter shift,0,0,1
+A,S8b,Imbalanced lists,parameter shift,0,0,1
+A,M1a,"Overdispersion, negative binomial r = 20",misspecification,0,0,1
+A,M1b,"Overdispersion, negative binomial r = 5",misspecification,0,0,1
+A,M2a,"One omitted three-way interaction, |δ| ~ U(1, 2)",misspecification,0,0,1
+A,M2b,"All three-way interactions, δ ~ N(0, 0.5²)",misspecification,0,0,1
+A,S9,Observed-like,parameter shift,0,0,1
+B,S0,In distribution,in distribution,1,4,1
+B,S1,"Small population, α ~ U(1, 3)",parameter shift,1,4,1
+B,S2,"Large population, α ~ U(8.5, 10)",parameter shift,1,4,1
+B,S3,"Large lists, β ~ N(2, 1)",parameter shift,1,4,1
+B,S4a,"Moderate effects, β, γ ~ N(0, 2²)",parameter shift,1,4,1
+B,S4b,"Weak effects, β, γ ~ N(0, 1)",parameter shift,1,4,1
+B,S5,"Strong effects, β, γ ~ N(0, 8²)",parameter shift,1,4,1
+B,S6,Exact-zero interactions,parameter shift,1,4,1
+B,S7,Empty overlap between two lists,parameter shift,1,4,1
+B,S8a,"Low capture, β ~ N(-3, 1)",parameter shift,1,4,1
+B,S8b,Imbalanced lists,parameter shift,1,4,1
+B,M1a,"Overdispersion, negative binomial r = 20",misspecification,1,4,1
+B,M1b,"Overdispersion, negative binomial r = 5",misspecification,1,4,1
+B,M2a,"One omitted three-way interaction, |δ| ~ U(1, 2)",misspecification,1,4,1
+B,M2b,"All three-way interactions, δ ~ N(0, 0.5²)",misspecification,1,4,1
+B,S9,Observed-like,parameter shift,1,4,1
+B,C1,"Censoring on [1, 9] at test time",censoring,1,9,1
+B,C2,Censoring of overlap cells only,censoring,1,4,2

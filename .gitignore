@@ -39,4 +39,5 @@ output/model_selection*/parameter_calibration_ranks.csv
 output/robustness/simulation/
 output/robustness/test_data/
 output/robustness/posteriors.csv
+output/robustness/datasets.csv
 output/models_robustness/*/logs/
