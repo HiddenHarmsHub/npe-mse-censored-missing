@@ -204,7 +204,12 @@ function exact_posterior(counts_obs, fit, priors, B; n_draws = 20_000, min_ess =
     ex = log_evidence(counts_obs, trues(J); kw..., n_draws)
     ex.ess >= min_ess && return (θ = ex.θ, ess = ex.ess, retried = false)
     pilot = Float64.(permutedims(ex.θ))
-    ex2 = log_evidence(counts_obs, trues(J); kw..., n_draws = 5n_draws, pilot_draws = pilot, ν = 10, scale = 1.2)
+    ex2 = try
+        log_evidence(counts_obs, trues(J); kw..., n_draws = 5n_draws, pilot_draws = pilot, ν = 10, scale = 1.2)
+    catch err
+        err isa PosDefException || rethrow()
+        return (θ = ex.θ, ess = ex.ess, retried = true)
+    end
     return ex2.ess >= ex.ess ? (θ = ex2.θ, ess = ex2.ess, retried = true) : (θ = ex.θ, ess = ex.ess, retried = true)
 end
 
