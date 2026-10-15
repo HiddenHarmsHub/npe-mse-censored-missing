@@ -13,10 +13,10 @@ method_colours <- c(
     "Model averaged" = "#2a78d6",
     "All interactions" = "#eb6834",
     "MAP structure" = "#1baf7a",
-    "Oracle structure" = "#eda100"
+    "True structure" = "#eda100"
 )
-method_shapes <- c("Model averaged" = 16, "All interactions" = 17, "MAP structure" = 15, "Oracle structure" = 18)
-method_labels <- c(bma = "Model averaged", all = "All interactions", map = "MAP structure", oracle = "Oracle structure")
+method_shapes <- c("Model averaged" = 16, "All interactions" = 17, "MAP structure" = 15, "True structure" = 18)
+method_labels <- c(bma = "Model averaged", all = "All interactions", map = "MAP structure", oracle = "True structure")
 real_labels <- c(A = "UK modern slavery (A)", B = "King drug use (B)")
 system_labels <- c(A = "A: five lists, uncensored", B = "B: four lists, censored [1, 4]")
 
