@@ -253,7 +253,7 @@ function summarise_metrics(df; levels = coverage_levels)
     ape = filter(isfinite, df.ape)
     row = (n = n, bias = mean(e), bias_se = mcse_mean(e),
            relative_bias = isempty(rel) ? NaN : mean(rel), relative_bias_se = isempty(rel) ? NaN : mcse_mean(rel),
-           median_relative_error = isempty(rel) ? NaN : median(rel),
+           median_relative_error = isempty(rel) ? NaN : median(rel), median_relative_error_se = isempty(rel) ? NaN : mcse_median(rel),
            rmse = sqrt(mean(abs2, e)), rmse_se = mcse_rmse(e), mae = mean(abs.(e)), mae_se = mcse_mean(abs.(e)),
            median_ape = isempty(ape) ? NaN : median(ape), median_ape_se = isempty(ape) ? NaN : mcse_median(ape),
            rank_ks = rank_ks(df.rank))

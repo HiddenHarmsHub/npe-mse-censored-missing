@@ -19,16 +19,20 @@ summary <- read_csv(file.path(input_dir, "scenario_summary.csv"), show_col_types
 scenarios <- read_csv(file.path(input_dir, "scenarios.csv"), show_col_types = FALSE)
 scenario_order <- rev(unique(scenarios$label))
 
+## NPE with importance sampling is a diagnostic only: its weights degenerate on most simulated datasets
+plotted_methods <- c("npe", "nbe", "exact", "bma")
+
 ## ---- Accuracy and coverage by scenario: N0 for the sampling methods, λ0 for the NBE ----
 main <- summary |>
-    filter(experiment == "main", (quantity == "N0" & method != "nbe") | (quantity == "lambda0" & method == "nbe")) |>
+    filter(experiment == "main", method %in% plotted_methods,
+           (quantity == "N0" & method != "nbe") | (quantity == "lambda0" & method == "nbe")) |>
     mutate(method = factor(method_labels[method], levels = names(method_colours)),
            label = factor(label, levels = scenario_order), system = system_labels[system])
 long <- bind_rows(
-    main |> transmute(system, label, method, metric = "Relative bias", value = relative_bias, se = relative_bias_se),
+    main |> transmute(system, label, method, metric = "Median relative error", value = median_relative_error, se = median_relative_error_se),
     main |> transmute(system, label, method, metric = "95% coverage", value = coverage_95, se = coverage_95_se)
 )
-reference_lines <- tibble(metric = c("Relative bias", "95% coverage"), x = c(0, 0.95))
+reference_lines <- tibble(metric = c("Median relative error", "95% coverage"), x = c(0, 0.95))
 p <- ggplot(long, aes(value, label, colour = method, shape = method)) +
     geom_vline(data = reference_lines, aes(xintercept = x), linetype = "dashed", colour = "grey50") +
     geom_linerange(aes(xmin = value - 2 * se, xmax = value + 2 * se), position = position_dodge(width = 0.7), linewidth = 0.5) +
@@ -42,12 +46,12 @@ save_figure(p, "robustness_scenarios.png", height = 9)
 approximation_file <- file.path(input_dir, "approximation.csv")
 if (file.exists(approximation_file)) {
     approximation <- read_csv(approximation_file, show_col_types = FALSE) |>
-        filter(experiment == "main", quantity == "alpha", method %in% c("npe", "nbe", "npe_nis")) |>
+        filter(experiment == "main", quantity == "alpha", method %in% c("npe", "nbe")) |>
         left_join(select(scenarios, system, scenario, label), by = c("system", "scenario")) |>
         mutate(method = factor(method_labels[method], levels = names(method_colours)),
                label = factor(label, levels = scenario_order), system = system_labels[system])
     long <- bind_rows(
-        approximation |> transmute(system, label, method, metric = "Median minus exact median (exact sds)", value = mean_d_median, se = mean_d_median_se),
+        approximation |> transmute(system, label, method, metric = "Neural minus exact median (exact sds)", value = median_d_median, se = median_d_median_se),
         approximation |> transmute(system, label, method, metric = "Share with |difference| > 0.5 sd", value = share_material, se = share_material_se)
     )
     p <- ggplot(long, aes(value, label, colour = method, shape = method)) +
@@ -62,7 +66,7 @@ if (file.exists(approximation_file)) {
 
 ## ---- By band of the true intercept, in distribution ----
 by_band <- read_csv(file.path(input_dir, "by_band.csv"), show_col_types = FALSE) |>
-    filter(scenario == "S0", (quantity == "N0" & method != "nbe") | (quantity == "lambda0" & method == "nbe")) |>
+    filter(scenario == "S0", method %in% plotted_methods, (quantity == "N0" & method != "nbe") | (quantity == "lambda0" & method == "nbe")) |>
     mutate(method = factor(method_labels[method], levels = names(method_colours)), system = system_labels[system])
 long <- bind_rows(
     by_band |> transmute(system, band, method, metric = "Median APE", value = median_ape, se = median_ape_se),

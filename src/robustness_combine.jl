@@ -57,6 +57,7 @@ neural.d_upper = (neural.upper_95 .- neural.exact_upper_95) ./ neural.exact_sd
 neural.width_ratio = neural.width_95 ./ neural.exact_width_95
 approx_summary(g) = (n = nrow(g),
     mean_d_median = mean(g.d_median), mean_d_median_se = mcse_mean(g.d_median), mean_abs_d_median = mean(abs.(g.d_median)),
+    median_d_median = median(g.d_median), median_d_median_se = mcse_median(g.d_median), median_abs_d_median = median(abs.(g.d_median)),
     mean_d_lower = mean(g.d_lower), mean_d_lower_se = mcse_mean(g.d_lower), mean_d_upper = mean(g.d_upper), mean_d_upper_se = mcse_mean(g.d_upper),
     mean_abs_d_tails = mean(vcat(abs.(g.d_lower), abs.(g.d_upper))),
     share_material = mean(abs.(g.d_median) .> 0.5), share_material_se = mcse_prop(mean(abs.(g.d_median) .> 0.5), nrow(g)),
