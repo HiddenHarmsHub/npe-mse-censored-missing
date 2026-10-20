@@ -272,6 +272,8 @@ comparison_df <- mcmc_df %>%
     ) %>%
     left_join(nbe_df, by = "dataset") %>%
     left_join(mcmc_status, by = "dataset") %>%
+    ## Datasets that reach the simulator cap are not draws from the model
+    filter(!capped) %>%
     pivot_longer(
         cols = c(
             median_mcmc, median_npe, median_nbe,
@@ -293,81 +295,39 @@ comparison_df <- mcmc_df %>%
         values_to = "Value"
     )
 
-## Accuracy against the simulated truth
-point_estimates <- comparison_df %>%
+## Accuracy against the simulated truth: ratio of estimated to true λ0 = e^α by size of the hidden population, on the log scale
+ratio_by_size <- comparison_df %>%
+    filter(Metric == "error") %>%
     mutate(
-        Metric = recode(
-            Metric, 
-            "absolute_error" = "absolute error",
-            "ape" = "absolute percentage error"
-        ),
-        Metric = factor(Metric, levels = c("error", "absolute error", "absolute percentage error"))
+        log_ratio = median - true_values,
+        band = cut(true_values, breaks = 1:10, include.lowest = TRUE,
+                   labels = paste0(1:9, "–", 2:10)),
+        Method = factor(Method, levels = c("MCMC", "NBE", "NPE"))
     ) %>%
-    ggplot(aes(y = Value, x = Method, fill = Method)) +
-    geom_violin(alpha = 0.5) +
-    scale_fill_manual(values = colour_map) +
-    ggh4x::facet_wrap2(
-        ~Metric, 
-        scales = "free_y",
-        labeller = labeller(Metric = function(x) toupper(x))
-    ) +
-    labs(
-        x = "Method",
-        y = "Value",
-        fill = "Method"
-    ) +
-    theme_minimal(base_size = 14) +
-    theme(
-        plot.title = element_text(face = "bold"),
-        panel.grid.minor = element_blank(),
-        legend.position = "top"
+    group_by(band, Method) %>%
+    summarise(
+        med = median(log_ratio),
+        q25 = quantile(log_ratio, 0.25), q75 = quantile(log_ratio, 0.75),
+        q05 = quantile(log_ratio, 0.05), q95 = quantile(log_ratio, 0.95),
+        .groups = "drop"
     )
-
-ggsave(
-    filename = file.path(figures_dir, "point_estimates_comparison.png"), 
-    plot = point_estimates, width = 10, height = 6, dpi = 300
-)
-
-point_estimates_zoomed <- comparison_df %>%
-    mutate(
-        Metric = recode(
-            Metric, 
-            "absolute_error" = "absolute error",
-            "ape" = "absolute percentage error"
-        ),
-        Metric = factor(Metric, levels = c("error", "absolute error", "absolute percentage error"))
-    ) %>%
-    ggplot(aes(y = Value, x = Method, fill = Method)) +
-    geom_violin(alpha = 0.5) +
-    scale_fill_manual(values = colour_map) +
-    ggh4x::facet_wrap2(
-        ~Metric, 
-        scales = "free_y",
-        labeller = labeller(Metric = function(x) toupper(x))
-    ) +
-    ggh4x::facetted_pos_scales(
-        y = list(
-            Metric == "absolute error"  ~ scale_y_continuous(trans = "log1p"),
-            Metric == "absolute percentage error" ~ scale_y_continuous(trans = "log1p"),
-            Metric == "error" ~ scale_y_continuous(limits = c(-5000, 5000))
-        )
-    ) +
-    labs(
-        x = "Method",
-        y = "Value",
-        fill = "Method"
-    ) +
+ratio_breaks <- c(0.25, 0.5, 0.8, 1, 1.25, 2, 4)
+point_estimates_by_size <- ggplot(ratio_by_size, aes(x = band, colour = Method, shape = Method)) +
+    geom_hline(yintercept = 0, linetype = "dashed", colour = "grey50") +
+    geom_linerange(aes(ymin = q05, ymax = q95), position = position_dodge(width = 0.6), linewidth = 0.5) +
+    geom_linerange(aes(ymin = q25, ymax = q75), position = position_dodge(width = 0.6), linewidth = 1.6) +
+    geom_point(aes(y = med), position = position_dodge(width = 0.6), size = 2.4, fill = "white", stroke = 1) +
+    scale_colour_manual(values = c(MCMC = "#33a02c", NBE = "#a6cee3", NPE = "#1f78b4")) +
+    scale_shape_manual(values = c(MCMC = 21, NBE = 24, NPE = 22)) +
+    scale_y_continuous(breaks = log(ratio_breaks), labels = ratio_breaks) +
+    coord_cartesian(ylim = log(c(0.25, 4))) +
+    labs(x = expression("True intercept " * alpha),
+         y = expression("Estimated " * lambda[0] * " / true " * lambda[0] * " (log scale)"),
+         colour = NULL, shape = NULL) +
     theme_minimal(base_size = 14) +
-    theme(
-        plot.title = element_text(face = "bold"),
-        panel.grid.minor = element_blank(),
-        legend.position = "top"
-    )
-
-ggsave(
-    filename = file.path(figures_dir, "point_estimates_comparison_zoomed.png"), 
-    plot = point_estimates_zoomed, width = 10, height = 6, dpi = 300
-)
+    theme(panel.grid.minor = element_blank(), panel.grid.major.x = element_blank(), legend.position = "top")
+ggsave(filename = file.path(figures_dir, "point_estimates_by_size.png"),
+       plot = point_estimates_by_size, width = 10, height = 5.5, dpi = 300)
 
 intercept_mcmc_status_plot <- comparison_df %>%
     filter(Method == "MCMC", Metric == "ape") %>%
@@ -393,7 +353,7 @@ ggsave(
 
 ## Signed bias, MAPE and RMSE of the hidden population with Monte Carlo standard errors
 point_estimate_summaries <- bind_rows(
-    comparison_df %>% mutate(Subset = "all"),
+    comparison_df %>% mutate(Subset = "below the cap"),
     comparison_df %>% filter(status != "failed") %>% mutate(Subset = "validated MCMC fits")
 ) %>%
     filter(Metric %in% c("error", "ape")) %>%

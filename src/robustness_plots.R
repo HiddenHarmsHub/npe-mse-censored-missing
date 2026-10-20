@@ -6,9 +6,9 @@ figures_dir <- file.path("output", "figures")
 dir.create(figures_dir, showWarnings = FALSE, recursive = TRUE)
 
 ## Fixed categorical order, validated for colour-vision deficiency on a light surface; shapes as secondary encoding
-method_labels <- c(npe = "NPE", nbe = "NBE", exact = "Exact posterior", npe_nis = "NPE with importance sampling", bma = "Model averaged")
-method_colours <- c("NPE" = "#eb6834", "NBE" = "#8b5cc7", "Exact posterior" = "#1baf7a", "NPE with importance sampling" = "#eda100", "Model averaged" = "#2a78d6")
-method_shapes <- c("NPE" = 16, "NBE" = 17, "Exact posterior" = 15, "NPE with importance sampling" = 18, "Model averaged" = 4)
+method_labels <- c(npe = "NPE", nbe = "NBE", exact = "Reference posterior", npe_nis = "NPE with importance sampling", bma = "Model averaged")
+method_colours <- c("NPE" = "#eb6834", "NBE" = "#8b5cc7", "Reference posterior" = "#1baf7a", "NPE with importance sampling" = "#eda100", "Model averaged" = "#2a78d6")
+method_shapes <- c("NPE" = 16, "NBE" = 17, "Reference posterior" = 15, "NPE with importance sampling" = 18, "Model averaged" = 4)
 system_labels <- c(A = "A: five lists, uncensored", B = "B: four lists, censored [1, 4]")
 
 theme_set(theme_bw(base_size = 11) + theme(panel.grid.minor = element_blank(), legend.position = "bottom"))
@@ -42,7 +42,7 @@ p <- ggplot(long, aes(value, label, colour = method, shape = method)) +
     labs(x = NULL, y = NULL)
 save_figure(p, "robustness_scenarios.png", height = 9)
 
-## ---- Approximation to the exact posterior ----
+## ---- Approximation to the reference posterior ----
 approximation_file <- file.path(input_dir, "approximation.csv")
 if (file.exists(approximation_file)) {
     approximation <- read_csv(approximation_file, show_col_types = FALSE) |>
@@ -51,7 +51,7 @@ if (file.exists(approximation_file)) {
         mutate(method = factor(method_labels[method], levels = names(method_colours)),
                label = factor(label, levels = scenario_order), system = system_labels[system])
     long <- bind_rows(
-        approximation |> transmute(system, label, method, metric = "Neural minus exact median (exact sds)", value = median_d_median, se = median_d_median_se),
+        approximation |> transmute(system, label, method, metric = "Neural minus reference median (reference sds)", value = median_d_median, se = median_d_median_se),
         approximation |> transmute(system, label, method, metric = "Share with |difference| > 0.5 sd", value = share_material, se = share_material_se)
     )
     p <- ggplot(long, aes(value, label, colour = method, shape = method)) +
