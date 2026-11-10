@@ -1,0 +1,312 @@
+[ Info: Running on CPU
+Sampling the validation set...
+Computing the initial validation risk... Initial validation risk = 5.365289e8
+Refreshing the training parameters... Finished in 0.359 seconds
+Refreshing the training data... Finished in 2.801 seconds
+Epoch: 1  Training risk: 504307.25  Validation risk: 35.692  Learning rate: 1.00E-03  Epoch time: 106.695 seconds
+Refreshing the training parameters... Finished in 0.212 seconds
+Refreshing the training data... Finished in 2.324 seconds
+Epoch: 2  Training risk: 32.728  Validation risk: 30.663  Learning rate: 1.00E-03  Epoch time: 147.369 seconds
+Refreshing the training parameters... Finished in 0.212 seconds
+Refreshing the training data... Finished in 2.578 seconds
+Epoch: 3  Training risk: 29.429  Validation risk: 28.521  Learning rate: 1.00E-03  Epoch time: 201.504 seconds
+Refreshing the training parameters... Finished in 0.231 seconds
+Refreshing the training data... Finished in 2.709 seconds
+Epoch: 4  Training risk: 27.664  Validation risk: 26.434  Learning rate: 9.99E-04  Epoch time: 219.923 seconds
+Refreshing the training parameters... Finished in 0.287 seconds
+Refreshing the training data... Finished in 4.392 seconds
+Epoch: 5  Training risk: 26.431  Validation risk: 25.324  Learning rate: 9.98E-04  Epoch time: 316.986 seconds
+Refreshing the training parameters... Finished in 0.231 seconds
+Refreshing the training data... Finished in 2.677 seconds
+Epoch: 6  Training risk: 25.329  Validation risk: 24.903  Learning rate: 9.96E-04  Epoch time: 180.859 seconds
+Refreshing the training parameters... Finished in 0.201 seconds
+Refreshing the training data... Finished in 2.633 seconds
+Epoch: 7  Training risk: 24.517  Validation risk: 24.144  Learning rate: 9.94E-04  Epoch time: 173.369 seconds
+Refreshing the training parameters... Finished in 0.251 seconds
+Refreshing the training data... Finished in 2.909 seconds
+Epoch: 8  Training risk: 23.829  Validation risk: 23.509  Learning rate: 9.91E-04  Epoch time: 193.073 seconds
+Refreshing the training parameters... Finished in 0.214 seconds
+Refreshing the training data... Finished in 2.683 seconds
+Epoch: 9  Training risk: 23.1  Validation risk: 22.145  Learning rate: 9.88E-04  Epoch time: 183.286 seconds
+Refreshing the training parameters... Finished in 0.201 seconds
+Refreshing the training data... Finished in 2.564 seconds
+Epoch: 10  Training risk: 22.457  Validation risk: 22.562  Learning rate: 9.84E-04  Epoch time: 168.325 seconds
+Refreshing the training parameters... Finished in 0.211 seconds
+Refreshing the training data... Finished in 2.615 seconds
+Epoch: 11  Training risk: 21.905  Validation risk: 20.667  Learning rate: 9.80E-04  Epoch time: 160.606 seconds
+Refreshing the training parameters... Finished in 0.199 seconds
+Refreshing the training data... Finished in 2.596 seconds
+Epoch: 12  Training risk: 21.248  Validation risk: 21.319  Learning rate: 9.76E-04  Epoch time: 161.916 seconds
+Refreshing the training parameters... Finished in 0.216 seconds
+Refreshing the training data... Finished in 2.465 seconds
+Epoch: 13  Training risk: 20.604  Validation risk: 20.312  Learning rate: 9.70E-04  Epoch time: 156.284 seconds
+Refreshing the training parameters... Finished in 0.209 seconds
+Refreshing the training data... Finished in 2.544 seconds
+Epoch: 14  Training risk: 20.014  Validation risk: 19.648  Learning rate: 9.65E-04  Epoch time: 157.472 seconds
+Refreshing the training parameters... Finished in 0.207 seconds
+Refreshing the training data... Finished in 2.532 seconds
+Epoch: 15  Training risk: 19.366  Validation risk: 18.921  Learning rate: 9.59E-04  Epoch time: 151.688 seconds
+Refreshing the training parameters... Finished in 0.199 seconds
+Refreshing the training data... Finished in 2.549 seconds
+Epoch: 16  Training risk: 18.65  Validation risk: 18.684  Learning rate: 9.52E-04  Epoch time: 143.845 seconds
+Refreshing the training parameters... Finished in 0.201 seconds
+Refreshing the training data... Finished in 2.271 seconds
+Epoch: 17  Training risk: 18.108  Validation risk: 17.353  Learning rate: 9.46E-04  Epoch time: 140.92 seconds
+Refreshing the training parameters... Finished in 0.195 seconds
+Refreshing the training data... Finished in 2.483 seconds
+Epoch: 18  Training risk: 17.477  Validation risk: 17.37  Learning rate: 9.38E-04  Epoch time: 141.397 seconds
+Refreshing the training parameters... Finished in 0.222 seconds
+Refreshing the training data... Finished in 2.443 seconds
+Epoch: 19  Training risk: 16.931  Validation risk: 16.468  Learning rate: 9.30E-04  Epoch time: 137.096 seconds
+Refreshing the training parameters... Finished in 0.195 seconds
+Refreshing the training data... Finished in 2.588 seconds
+Epoch: 20  Training risk: 16.248  Validation risk: 16.313  Learning rate: 9.22E-04  Epoch time: 128.966 seconds
+Refreshing the training parameters... Finished in 0.202 seconds
+Refreshing the training data... Finished in 2.576 seconds
+Epoch: 21  Training risk: 15.802  Validation risk: 16.168  Learning rate: 9.14E-04  Epoch time: 135.708 seconds
+Refreshing the training parameters... Finished in 0.211 seconds
+Refreshing the training data... Finished in 2.487 seconds
+Epoch: 22  Training risk: 15.266  Validation risk: 15.159  Learning rate: 9.05E-04  Epoch time: 134.811 seconds
+Refreshing the training parameters... Finished in 0.214 seconds
+Refreshing the training data... Finished in 2.399 seconds
+Epoch: 23  Training risk: 14.825  Validation risk: 13.508  Learning rate: 8.95E-04  Epoch time: 135.141 seconds
+Refreshing the training parameters... Finished in 0.202 seconds
+Refreshing the training data... Finished in 2.575 seconds
+Epoch: 24  Training risk: 14.378  Validation risk: 13.242  Learning rate: 8.85E-04  Epoch time: 134.987 seconds
+Refreshing the training parameters... Finished in 0.208 seconds
+Refreshing the training data... Finished in 2.527 seconds
+Epoch: 25  Training risk: 13.69  Validation risk: 16.218  Learning rate: 8.75E-04  Epoch time: 125.66 seconds
+Refreshing the training parameters... Finished in 0.228 seconds
+Refreshing the training data... Finished in 2.612 seconds
+Epoch: 26  Training risk: 13.357  Validation risk: 13.323  Learning rate: 8.64E-04  Epoch time: 120.359 seconds
+Refreshing the training parameters... Finished in 0.221 seconds
+Refreshing the training data... Finished in 2.563 seconds
+Epoch: 27  Training risk: 13.182  Validation risk: 10.466  Learning rate: 8.54E-04  Epoch time: 122.366 seconds
+Refreshing the training parameters... Finished in 0.207 seconds
+Refreshing the training data... Finished in 2.541 seconds
+Epoch: 28  Training risk: 12.503  Validation risk: 12.419  Learning rate: 8.42E-04  Epoch time: 125.014 seconds
+Refreshing the training parameters... Finished in 0.212 seconds
+Refreshing the training data... Finished in 2.633 seconds
+Epoch: 29  Training risk: 12.119  Validation risk: 9.601  Learning rate: 8.31E-04  Epoch time: 113.92 seconds
+Refreshing the training parameters... Finished in 0.212 seconds
+Refreshing the training data... Finished in 2.392 seconds
+Epoch: 30  Training risk: 11.529  Validation risk: 12.324  Learning rate: 8.19E-04  Epoch time: 111.825 seconds
+Refreshing the training parameters... Finished in 0.247 seconds
+Refreshing the training data... Finished in 2.399 seconds
+Epoch: 31  Training risk: 11.422  Validation risk: 11.53  Learning rate: 8.06E-04  Epoch time: 118.667 seconds
+Refreshing the training parameters... Finished in 0.235 seconds
+Refreshing the training data... Finished in 2.514 seconds
+Epoch: 32  Training risk: 11.016  Validation risk: 9.832  Learning rate: 7.94E-04  Epoch time: 115.445 seconds
+Refreshing the training parameters... Finished in 0.218 seconds
+Refreshing the training data... Finished in 2.543 seconds
+Epoch: 33  Training risk: 9.993  Validation risk: 8.61  Learning rate: 7.81E-04  Epoch time: 120.773 seconds
+Refreshing the training parameters... Finished in 0.202 seconds
+Refreshing the training data... Finished in 2.537 seconds
+Epoch: 34  Training risk: 9.707  Validation risk: 8.71  Learning rate: 7.68E-04  Epoch time: 117.195 seconds
+Refreshing the training parameters... Finished in 0.234 seconds
+Refreshing the training data... Finished in 2.539 seconds
+Epoch: 35  Training risk: 9.458  Validation risk: 7.772  Learning rate: 7.55E-04  Epoch time: 123.943 seconds
+Refreshing the training parameters... Finished in 0.199 seconds
+Refreshing the training data... Finished in 2.464 seconds
+Epoch: 36  Training risk: 8.196  Validation risk: 6.988  Learning rate: 7.41E-04  Epoch time: 122.853 seconds
+Refreshing the training parameters... Finished in 0.234 seconds
+Refreshing the training data... Finished in 2.532 seconds
+Epoch: 37  Training risk: 8.161  Validation risk: 7.091  Learning rate: 7.27E-04  Epoch time: 117.235 seconds
+Refreshing the training parameters... Finished in 0.217 seconds
+Refreshing the training data... Finished in 2.531 seconds
+Epoch: 38  Training risk: 8.747  Validation risk: 8.08  Learning rate: 7.13E-04  Epoch time: 121.657 seconds
+Refreshing the training parameters... Finished in 0.21 seconds
+Refreshing the training data... Finished in 2.577 seconds
+Epoch: 39  Training risk: 7.264  Validation risk: 4.82  Learning rate: 6.99E-04  Epoch time: 123.343 seconds
+Refreshing the training parameters... Finished in 0.2 seconds
+Refreshing the training data... Finished in 2.645 seconds
+Epoch: 40  Training risk: 6.357  Validation risk: 5.111  Learning rate: 6.84E-04  Epoch time: 128.154 seconds
+Refreshing the training parameters... Finished in 0.211 seconds
+Refreshing the training data... Finished in 2.523 seconds
+Epoch: 41  Training risk: 6.254  Validation risk: 4.433  Learning rate: 6.69E-04  Epoch time: 136.152 seconds
+Refreshing the training parameters... Finished in 0.201 seconds
+Refreshing the training data... Finished in 2.55 seconds
+Epoch: 42  Training risk: 6.302  Validation risk: 4.684  Learning rate: 6.55E-04  Epoch time: 127.025 seconds
+Refreshing the training parameters... Finished in 0.214 seconds
+Refreshing the training data... Finished in 2.518 seconds
+Epoch: 43  Training risk: 5.104  Validation risk: 3.924  Learning rate: 6.39E-04  Epoch time: 133.583 seconds
+Refreshing the training parameters... Finished in 0.196 seconds
+Refreshing the training data... Finished in 2.553 seconds
+Epoch: 44  Training risk: 4.956  Validation risk: 4.587  Learning rate: 6.24E-04  Epoch time: 137.761 seconds
+Refreshing the training parameters... Finished in 0.214 seconds
+Refreshing the training data... Finished in 2.543 seconds
+Epoch: 45  Training risk: 3.97  Validation risk: 3.357  Learning rate: 6.09E-04  Epoch time: 141.634 seconds
+Refreshing the training parameters... Finished in 0.213 seconds
+Refreshing the training data... Finished in 2.282 seconds
+Epoch: 46  Training risk: 4.433  Validation risk: 2.763  Learning rate: 5.94E-04  Epoch time: 129.534 seconds
+Refreshing the training parameters... Finished in 0.204 seconds
+Refreshing the training data... Finished in 2.585 seconds
+Epoch: 47  Training risk: 3.537  Validation risk: 2.425  Learning rate: 5.78E-04  Epoch time: 129.695 seconds
+Refreshing the training parameters... Finished in 0.201 seconds
+Refreshing the training data... Finished in 2.528 seconds
+Epoch: 48  Training risk: 2.791  Validation risk: 4.318  Learning rate: 5.63E-04  Epoch time: 145.237 seconds
+Refreshing the training parameters... Finished in 0.214 seconds
+Refreshing the training data... Finished in 2.61 seconds
+Epoch: 49  Training risk: 2.644  Validation risk: 0.609  Learning rate: 5.47E-04  Epoch time: 149.091 seconds
+Refreshing the training parameters... Finished in 0.203 seconds
+Refreshing the training data... Finished in 2.55 seconds
+Epoch: 50  Training risk: 2.363  Validation risk: 1.619  Learning rate: 5.31E-04  Epoch time: 140.923 seconds
+Refreshing the training parameters... Finished in 0.213 seconds
+Refreshing the training data... Finished in 2.605 seconds
+Epoch: 51  Training risk: 2.05  Validation risk: 2.009  Learning rate: 5.16E-04  Epoch time: 149.36 seconds
+Refreshing the training parameters... Finished in 0.214 seconds
+Refreshing the training data... Finished in 2.573 seconds
+Epoch: 52  Training risk: 1.088  Validation risk: -1.135  Learning rate: 5.00E-04  Epoch time: 155.363 seconds
+Refreshing the training parameters... Finished in 0.209 seconds
+Refreshing the training data... Finished in 2.556 seconds
+Epoch: 53  Training risk: 0.874  Validation risk: -0.621  Learning rate: 4.84E-04  Epoch time: 150.879 seconds
+Refreshing the training parameters... Finished in 0.223 seconds
+Refreshing the training data... Finished in 2.627 seconds
+Epoch: 54  Training risk: 0.68  Validation risk: 0.716  Learning rate: 4.69E-04  Epoch time: 155.681 seconds
+Refreshing the training parameters... Finished in 0.216 seconds
+Refreshing the training data... Finished in 2.506 seconds
+Epoch: 55  Training risk: 0.295  Validation risk: 0.055  Learning rate: 4.53E-04  Epoch time: 150.015 seconds
+Refreshing the training parameters... Finished in 0.213 seconds
+Refreshing the training data... Finished in 2.553 seconds
+Epoch: 56  Training risk: -0.349  Validation risk: -1.903  Learning rate: 4.37E-04  Epoch time: 153.6 seconds
+Refreshing the training parameters... Finished in 0.202 seconds
+Refreshing the training data... Finished in 2.546 seconds
+Epoch: 57  Training risk: -0.702  Validation risk: -1.003  Learning rate: 4.22E-04  Epoch time: 155.633 seconds
+Refreshing the training parameters... Finished in 0.213 seconds
+Refreshing the training data... Finished in 2.41 seconds
+Epoch: 58  Training risk: -1.214  Validation risk: -1.243  Learning rate: 4.06E-04  Epoch time: 151.286 seconds
+Refreshing the training parameters... Finished in 0.234 seconds
+Refreshing the training data... Finished in 2.541 seconds
+Epoch: 59  Training risk: -1.516  Validation risk: -3.422  Learning rate: 3.91E-04  Epoch time: 153.98 seconds
+Refreshing the training parameters... Finished in 0.212 seconds
+Refreshing the training data... Finished in 2.582 seconds
+Epoch: 60  Training risk: -1.645  Validation risk: -0.762  Learning rate: 3.76E-04  Epoch time: 153.502 seconds
+Refreshing the training parameters... Finished in 0.218 seconds
+Refreshing the training data... Finished in 2.612 seconds
+Epoch: 61  Training risk: -2.129  Validation risk: -3.947  Learning rate: 3.61E-04  Epoch time: 155.512 seconds
+Refreshing the training parameters... Finished in 0.199 seconds
+Refreshing the training data... Finished in 2.343 seconds
+Epoch: 62  Training risk: -2.726  Validation risk: -2.843  Learning rate: 3.45E-04  Epoch time: 165.966 seconds
+Refreshing the training parameters... Finished in 0.254 seconds
+Refreshing the training data... Finished in 2.494 seconds
+Epoch: 63  Training risk: -2.941  Validation risk: -4.062  Learning rate: 3.31E-04  Epoch time: 154.656 seconds
+Refreshing the training parameters... Finished in 0.217 seconds
+Refreshing the training data... Finished in 2.635 seconds
+Epoch: 64  Training risk: -3.461  Validation risk: -4.075  Learning rate: 3.16E-04  Epoch time: 162.73 seconds
+Refreshing the training parameters... Finished in 0.208 seconds
+Refreshing the training data... Finished in 2.55 seconds
+Epoch: 65  Training risk: -4.031  Validation risk: -4.019  Learning rate: 3.01E-04  Epoch time: 161.841 seconds
+Refreshing the training parameters... Finished in 0.221 seconds
+Refreshing the training data... Finished in 2.645 seconds
+Epoch: 66  Training risk: -4.262  Validation risk: -4.975  Learning rate: 2.87E-04  Epoch time: 163.116 seconds
+Refreshing the training parameters... Finished in 0.205 seconds
+Refreshing the training data... Finished in 2.552 seconds
+Epoch: 67  Training risk: -4.663  Validation risk: -6.266  Learning rate: 2.73E-04  Epoch time: 159.568 seconds
+Refreshing the training parameters... Finished in 0.203 seconds
+Refreshing the training data... Finished in 2.54 seconds
+Epoch: 68  Training risk: -5.085  Validation risk: -5.878  Learning rate: 2.59E-04  Epoch time: 158.135 seconds
+Refreshing the training parameters... Finished in 0.211 seconds
+Refreshing the training data... Finished in 2.575 seconds
+Epoch: 69  Training risk: -5.321  Validation risk: -6.362  Learning rate: 2.45E-04  Epoch time: 154.845 seconds
+Refreshing the training parameters... Finished in 0.2 seconds
+Refreshing the training data... Finished in 2.552 seconds
+Epoch: 70  Training risk: -5.715  Validation risk: -6.208  Learning rate: 2.32E-04  Epoch time: 163.04 seconds
+Refreshing the training parameters... Finished in 0.221 seconds
+Refreshing the training data... Finished in 2.419 seconds
+Epoch: 71  Training risk: -6.218  Validation risk: -7.312  Learning rate: 2.19E-04  Epoch time: 164.407 seconds
+Refreshing the training parameters... Finished in 0.201 seconds
+Refreshing the training data... Finished in 2.561 seconds
+Epoch: 72  Training risk: -6.63  Validation risk: -7.49  Learning rate: 2.06E-04  Epoch time: 159.082 seconds
+Refreshing the training parameters... Finished in 0.21 seconds
+Refreshing the training data... Finished in 2.63 seconds
+Epoch: 73  Training risk: -7.072  Validation risk: -8.49  Learning rate: 1.94E-04  Epoch time: 165.075 seconds
+Refreshing the training parameters... Finished in 0.202 seconds
+Refreshing the training data... Finished in 2.58 seconds
+Epoch: 74  Training risk: -7.329  Validation risk: -7.723  Learning rate: 1.81E-04  Epoch time: 160.574 seconds
+Refreshing the training parameters... Finished in 0.249 seconds
+Refreshing the training data... Finished in 2.563 seconds
+Epoch: 75  Training risk: -7.651  Validation risk: -7.814  Learning rate: 1.69E-04  Epoch time: 159.656 seconds
+Refreshing the training parameters... Finished in 0.213 seconds
+Refreshing the training data... Finished in 2.603 seconds
+Epoch: 76  Training risk: -7.992  Validation risk: -8.422  Learning rate: 1.58E-04  Epoch time: 165.448 seconds
+Refreshing the training parameters... Finished in 0.212 seconds
+Refreshing the training data... Finished in 2.645 seconds
+Epoch: 77  Training risk: -8.405  Validation risk: -8.097  Learning rate: 1.46E-04  Epoch time: 164.24 seconds
+Refreshing the training parameters... Finished in 0.222 seconds
+Refreshing the training data... Finished in 2.55 seconds
+Epoch: 78  Training risk: -8.793  Validation risk: -9.249  Learning rate: 1.36E-04  Epoch time: 164.787 seconds
+Refreshing the training parameters... Finished in 0.197 seconds
+Refreshing the training data... Finished in 2.688 seconds
+Epoch: 79  Training risk: -9.31  Validation risk: -10.329  Learning rate: 1.25E-04  Epoch time: 160.984 seconds
+Refreshing the training parameters... Finished in 0.201 seconds
+Refreshing the training data... Finished in 2.733 seconds
+Epoch: 80  Training risk: -9.616  Validation risk: -10.078  Learning rate: 1.15E-04  Epoch time: 162.221 seconds
+Refreshing the training parameters... Finished in 0.213 seconds
+Refreshing the training data... Finished in 2.809 seconds
+Epoch: 81  Training risk: -9.952  Validation risk: -8.626  Learning rate: 1.05E-04  Epoch time: 165.078 seconds
+Refreshing the training parameters... Finished in 0.21 seconds
+Refreshing the training data... Finished in 2.711 seconds
+Epoch: 82  Training risk: -10.399  Validation risk: -11.226  Learning rate: 9.55E-05  Epoch time: 164.422 seconds
+Refreshing the training parameters... Finished in 0.21 seconds
+Refreshing the training data... Finished in 2.789 seconds
+Epoch: 83  Training risk: -10.632  Validation risk: -11.66  Learning rate: 8.65E-05  Epoch time: 160.625 seconds
+Refreshing the training parameters... Finished in 0.199 seconds
+Refreshing the training data... Finished in 2.832 seconds
+Epoch: 84  Training risk: -10.978  Validation risk: -10.696  Learning rate: 7.78E-05  Epoch time: 165.085 seconds
+Refreshing the training parameters... Finished in 0.215 seconds
+Refreshing the training data... Finished in 2.758 seconds
+Epoch: 85  Training risk: -11.358  Validation risk: -11.092  Learning rate: 6.96E-05  Epoch time: 159.068 seconds
+Refreshing the training parameters... Finished in 0.214 seconds
+Refreshing the training data... Finished in 2.781 seconds
+Epoch: 86  Training risk: -11.683  Validation risk: -11.645  Learning rate: 6.18E-05  Epoch time: 163.285 seconds
+Refreshing the training parameters... Finished in 0.217 seconds
+Refreshing the training data... Finished in 2.806 seconds
+Epoch: 87  Training risk: -12.136  Validation risk: -11.599  Learning rate: 5.45E-05  Epoch time: 166.14 seconds
+Refreshing the training parameters... Finished in 0.221 seconds
+Refreshing the training data... Finished in 2.745 seconds
+Epoch: 88  Training risk: -12.308  Validation risk: -12.887  Learning rate: 4.76E-05  Epoch time: 158.649 seconds
+Refreshing the training parameters... Finished in 0.208 seconds
+Refreshing the training data... Finished in 2.79 seconds
+Epoch: 89  Training risk: -12.649  Validation risk: -13.094  Learning rate: 4.11E-05  Epoch time: 161.484 seconds
+Refreshing the training parameters... Finished in 0.213 seconds
+Refreshing the training data... Finished in 2.704 seconds
+Epoch: 90  Training risk: -12.999  Validation risk: -13.349  Learning rate: 3.51E-05  Epoch time: 164.672 seconds
+Refreshing the training parameters... Finished in 0.199 seconds
+Refreshing the training data... Finished in 2.791 seconds
+Epoch: 91  Training risk: -13.16  Validation risk: -12.933  Learning rate: 2.96E-05  Epoch time: 166.147 seconds
+Refreshing the training parameters... Finished in 0.247 seconds
+Refreshing the training data... Finished in 2.596 seconds
+Epoch: 92  Training risk: -13.505  Validation risk: -13.516  Learning rate: 2.45E-05  Epoch time: 162.555 seconds
+Refreshing the training parameters... Finished in 0.2 seconds
+Refreshing the training data... Finished in 2.476 seconds
+Epoch: 93  Training risk: -13.7  Validation risk: -13.856  Learning rate: 1.99E-05  Epoch time: 169.499 seconds
+Refreshing the training parameters... Finished in 0.209 seconds
+Refreshing the training data... Finished in 2.501 seconds
+Epoch: 94  Training risk: -13.841  Validation risk: -14.206  Learning rate: 1.57E-05  Epoch time: 159.358 seconds
+Refreshing the training parameters... Finished in 0.201 seconds
+Refreshing the training data... Finished in 2.529 seconds
+Epoch: 95  Training risk: -13.982  Validation risk: -14.305  Learning rate: 1.20E-05  Epoch time: 171.429 seconds
+Refreshing the training parameters... Finished in 0.197 seconds
+Refreshing the training data... Finished in 2.57 seconds
+Epoch: 96  Training risk: -14.164  Validation risk: -14.372  Learning rate: 8.86E-06  Epoch time: 178.499 seconds
+Refreshing the training parameters... Finished in 0.215 seconds
+Refreshing the training data... Finished in 2.488 seconds
+Epoch: 97  Training risk: -14.297  Validation risk: -14.558  Learning rate: 6.16E-06  Epoch time: 163.97 seconds
+Refreshing the training parameters... Finished in 0.21 seconds
+Refreshing the training data... Finished in 2.496 seconds
+Epoch: 98  Training risk: -14.386  Validation risk: -14.668  Learning rate: 3.94E-06  Epoch time: 162.578 seconds
+Refreshing the training parameters... Finished in 0.208 seconds
+Refreshing the training data... Finished in 2.54 seconds
+Epoch: 99  Training risk: -14.459  Validation risk: -14.772  Learning rate: 2.22E-06  Epoch time: 164.422 seconds
+Refreshing the training parameters... Finished in 0.199 seconds
+Refreshing the training data... Finished in 2.541 seconds
+Epoch: 100  Training risk: -14.55  Validation risk: -14.782  Learning rate: 9.87E-07  Epoch time: 163.4 seconds
+Finished training in 15598.149444797 seconds
+shipped  level 0.5: alpha coverage 0.545, parameters outside ±0.031: 12/16
+shipped  level 0.8: alpha coverage 0.815, parameters outside ±0.025: 12/16
+shipped  level 0.95: alpha coverage 0.949, parameters outside ±0.014: 8/16
+pilot    level 0.5: alpha coverage 0.486, parameters outside ±0.031: 3/16
+pilot    level 0.8: alpha coverage 0.779, parameters outside ±0.025: 2/16
+pilot    level 0.95: alpha coverage 0.926, parameters outside ±0.014: 5/16
+shipped  N0 bias -389.1 (se 52.1), MAPE 0.611, mean |alpha median - NUTS median| 2.836, mean 95% width 2.452
+pilot    N0 bias -120.6 (se 28.4), MAPE 0.496, mean |alpha median - NUTS median| 2.859, mean 95% width 1.595
