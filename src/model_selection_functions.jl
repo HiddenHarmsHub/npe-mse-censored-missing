@@ -369,30 +369,21 @@ end
 
 effective_draws(θ, models, K) = isempty(models) ? θ : reduce(hcat, [effective_parameters(t, model_mask(c, K)) for (t, c) in zip(eachcol(θ), models)])
 
-## Model-averaged posterior from q(m | y) q(θ | y, m), restricted jointly to the intercept support
+## Model-averaged posterior from q(m | y) q(θ | y, m). The structure is drawn from the classifier and kept,
+## and θ is redrawn given m until α lies in the intercept support, so the structure probabilities are the
+## classifier's. (Rejecting (m, θ) jointly would multiply them by each structure's acceptance rate.)
 function sample_model_averaged_posterior(cnpe, y, π, B, system; counts_obs, lower = 1.0, upper = 10.0, max_rounds = 20, rng = Random.default_rng())
     K = system.K
     π = π ./ sum(π)
     models, θs = Int[], Matrix{Float32}[]
-    have, requested, n_request = 0, 0, B
-    for _ in 1:max_rounds
-        have >= B && break
-        for (c, n) in enumerate(rand(rng, Multinomial(n_request, π)))
-            n == 0 && continue
-            θ = in_support(raw_draws(cnpe, reshape(cnpe_input(y, model_mask(c, K)), :, 1), n), lower, upper)
-            requested += n
-            size(θ, 2) == 0 && continue
-            push!(θs, θ)
-            append!(models, fill(c, size(θ, 2)))
-            have += size(θ, 2)
-        end
-        acceptance = max(have / requested, 0.01)
-        n_request = min(ceil(Int, 1.2 * (B - have) / acceptance), 20 * B)
+    for (c, n) in enumerate(rand(rng, Multinomial(B, π)))
+        n == 0 && continue
+        θ = bounded_draws(cnpe, reshape(cnpe_input(y, model_mask(c, K)), :, 1), n; lower, upper, max_rounds)
+        size(θ, 2) == 0 && continue
+        push!(θs, θ)
+        append!(models, fill(c, size(θ, 2)))
     end
-    have < B && @warn "Only $have of $B model-averaged draws fell inside the intercept support." maxlog = 20
     θ = isempty(θs) ? zeros(Float32, 1 + K + binomial(K, 2), 0) : reduce(hcat, θs)
-    keep = have > B ? sort(randperm(rng, have)[1:B]) : (1:have)
-    θ, models = θ[:, keep], models[keep]
     θ_eff = effective_draws(θ, models, K)
     pop = population_draws(θ_eff, counts_obs; system.censoring_lower, system.censoring_upper, rng)
     return (; models, θ, θ_eff, pop...)

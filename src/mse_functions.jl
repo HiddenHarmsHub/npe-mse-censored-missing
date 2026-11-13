@@ -21,6 +21,17 @@ function sample_parameters(
     return Float32.(vcat(intercept, betas, gammas))
 end
 
+## Training draw from the prior; with redraw_capped, parameter vectors with any log-rate above the simulator
+## cap are redrawn, so every training pair is a draw from the model (the prior truncated below the cap)
+function sample_training_parameters(K::Int; redraw_capped = false, kwargs...)
+    θ = sample_parameters(K; kwargs...)
+    redraw_capped || return θ
+    while is_capped(θ)
+        θ = sample_parameters(K; kwargs...)
+    end
+    return θ
+end
+
 function enumerate_two_digit_numbers(K::Int)
     numbers = Vector{Int64}[]
     for i in 1:K-1
@@ -190,7 +201,7 @@ function train_model_mlp(
     m = 1, censoring_lower = 0, censoring_upper = 0, savepath = nothing, intercept_dist = Uniform(1, 10),
     beta_dist = Normal(0, 4), gamma_dist = Normal(0, 4), probs = nbe_probs, filename = nothing,
     epochs = 100, stopping_epochs = 5, K_val = train_size ÷ 5 + 1, batchsize = 32, learning_rate = 5e-4,
-    input_scale = nothing, training_path = nothing
+    input_scale = nothing, training_path = nothing, redraw_capped = false
 )
     estimator_mdl_str = isnothing(filename) ? "model_$(n_lists)_$(width)_$(n_hidden)_$(train_size)_$(censoring_lower)_$(censoring_upper)_$(m).bson" : filename
 
@@ -199,7 +210,7 @@ function train_model_mlp(
     all_combinations = enumerate_all_combinations(n_lists)
     two_digit_numbers = enumerate_two_digit_numbers(n_lists)
 
-    sample_nbe(n_reps) = hcat([sample_parameters(n_lists; intercept_dist, beta_dist, gamma_dist) for _ in 1:n_reps]...)
+    sample_nbe(n_reps) = hcat([sample_training_parameters(n_lists; intercept_dist, beta_dist, gamma_dist, redraw_capped) for _ in 1:n_reps]...)
     function simulate_nbe(θ, m)
         Z = Folds.map(eachcol(θ)) do params
             simulate_data(params, m, censoring_lower = censoring_lower, censoring_upper = censoring_upper, all_combinations = all_combinations, two_digit_numbers = two_digit_numbers)
@@ -418,7 +429,7 @@ function train_npe(
     m = 1, censoring_lower = 0, censoring_upper = 0, savepath = nothing, intercept_dist = Uniform(1, 10),
     beta_dist = Normal(0, 4), gamma_dist = Normal(0, 4), filename = nothing,
     epochs = 200, stopping_epochs = 5, K_val = train_size ÷ 5 + 1, batchsize = 32, learning_rate = 5e-4,
-    num_coupling_layers = 6, input_scale = nothing, training_path = nothing
+    num_coupling_layers = 6, input_scale = nothing, training_path = nothing, redraw_capped = false
 )
     estimator_mdl_str = isnothing(filename) ? "model_$(n_lists)_$(width)_$(n_hidden)_$(encoding_dim)_$(train_size)_$(censoring_lower)_$(censoring_upper)_$(m).bson" : filename
     n_data = 2^n_lists - 1
@@ -430,7 +441,7 @@ function train_npe(
     all_combinations = enumerate_all_combinations(n_lists)
     two_digit_numbers = enumerate_two_digit_numbers(n_lists)
 
-    sample_nbe(n_reps) = hcat([sample_parameters(n_lists; intercept_dist, beta_dist, gamma_dist) for _ in 1:n_reps]...)
+    sample_nbe(n_reps) = hcat([sample_training_parameters(n_lists; intercept_dist, beta_dist, gamma_dist, redraw_capped) for _ in 1:n_reps]...)
     function simulate_nbe(θ, m)
         Z = Folds.map(eachcol(θ)) do params
             simulate_data(params, m, censoring_lower = censoring_lower, censoring_upper = censoring_upper, all_combinations = all_combinations, two_digit_numbers = two_digit_numbers)

@@ -296,8 +296,9 @@ comparison_df <- mcmc_df %>%
     )
 
 ## Accuracy against the simulated truth: ratio of estimated to true λ0 = e^α by size of the hidden population, on the log scale
+## All three methods on the same datasets with a validated reference fit
 ratio_by_size <- comparison_df %>%
-    filter(Metric == "error") %>%
+    filter(Metric == "error", status != "failed") %>%
     mutate(
         log_ratio = median - true_values,
         band = cut(true_values, breaks = 1:10, include.lowest = TRUE,
@@ -363,9 +364,17 @@ point_estimate_summaries <- bind_rows(
         n = n(),
         Bias = mean(error),
         Bias_se = sd(error) / sqrt(n),
+        Median_APE = median(ape),
+        ## Bootstrap standard error of the median APE
+        Median_APE_se = {
+            set.seed(1)
+            sd(replicate(2000, median(sample(ape, replace = TRUE))))
+        },
         MAPE = mean(ape),
         MAPE_se = sd(ape) / sqrt(n),
         RMSE = sqrt(mean(error^2)),
+        Coverage_95 = mean(lower_ci <= true_values & true_values <= upper_ci),
+        Coverage_95_se = sqrt(Coverage_95 * (1 - Coverage_95) / n),
         .groups = "drop"
     )
 
@@ -465,9 +474,10 @@ sbc_df <- read_csv(file.path("output", "sbc_ranks.csv"), show_col_types = FALSE)
     left_join(benchmark_sets %>% select(dataset, capped), by = "dataset") %>%
     left_join(mcmc_status %>% select(dataset, mcmc_status = status), by = "dataset") %>%
     left_join(irls_diagnostics_df %>% select(dataset, irls_status = status), by = "dataset") %>%
+    ## NPE and MCMC on the same datasets with a validated reference fit; IRLS where it met the criteria
     filter(
         !capped,
-        method != "MCMC" | mcmc_status != "failed",
+        method == "IRLS" | mcmc_status != "failed",
         method != "IRLS" | irls_status == "passed"
     )
 
@@ -497,7 +507,8 @@ write_csv(
 
 coverage_plot <- coverage_alpha %>%
     ggplot(aes(x = level, y = coverage)) +
-    geom_ribbon(aes(ymin = band_lower, ymax = band_upper), fill = "grey85") +
+    ## Band for the method with the fewest datasets (IRLS), the widest of the three
+    geom_ribbon(data = ~ filter(.x, n == min(n)), aes(ymin = band_lower, ymax = band_upper), fill = "grey85") +
     geom_abline(slope = 1, intercept = 0, linetype = "dashed") +
     geom_line(aes(col = method), lwd = 1.2) +
     labs(
@@ -518,18 +529,25 @@ ggsave(
     plot = coverage_plot, width = 7, height = 5, dpi = 300
 )
 
+## Expected count and uniformity band per method, since the methods have different numbers of datasets
 sbc_histogram <- function(df) {
     n_bins <- 20
-    n_datasets <- n_distinct(df$dataset)
-    expected <- n_datasets / n_bins
+    bands <- df %>%
+        group_by(across(any_of(c("method", "parameters")))) %>%
+        summarise(n_datasets = n_distinct(dataset), .groups = "drop") %>%
+        mutate(
+            expected = n_datasets / n_bins,
+            lower = qbinom(0.005, n_datasets, 1 / n_bins),
+            upper = qbinom(0.995, n_datasets, 1 / n_bins)
+        )
     df %>%
         ggplot(aes(x = rank)) +
-        annotate(
-            "rect", xmin = -Inf, xmax = Inf,
-            ymin = qbinom(0.005, n_datasets, 1 / n_bins), ymax = qbinom(0.995, n_datasets, 1 / n_bins),
+        geom_rect(
+            data = bands, inherit.aes = FALSE,
+            aes(xmin = -Inf, xmax = Inf, ymin = lower, ymax = upper),
             fill = "grey85"
         ) +
-        geom_hline(yintercept = expected, linetype = "dashed") +
+        geom_hline(data = bands, aes(yintercept = expected), linetype = "dashed") +
         geom_histogram(aes(fill = method), breaks = seq(0, 1, length.out = n_bins + 1), alpha = 0.8) +
         scale_fill_manual(values = colour_map) +
         labs(x = "Fractional rank of the true value", y = "Count", fill = "Method") +

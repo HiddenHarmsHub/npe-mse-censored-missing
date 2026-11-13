@@ -186,6 +186,9 @@ struct StubNPE end
 NeuralEstimators.sampleposterior(::StubNPE, Z, N::Integer; kw...) = vcat(fill(5f0, 1, N), randn(Float32, 10, N))
 struct OutsideNPE end
 NeuralEstimators.sampleposterior(::OutsideNPE, Z, N::Integer; kw...) = vcat(fill(any(Z[end-5:end, 1] .> 0) ? 5f0 : 0.5f0, 1, N), randn(Float32, 10, N))
+## 80% of draws outside the intercept support when the last interaction is included, none otherwise
+struct PartialNPE end
+NeuralEstimators.sampleposterior(::PartialNPE, Z, N::Integer; kw...) = vcat(reshape(ifelse.(rand(N) .< (Z[end, 1] > 0 ? 0.8 : 0.0), 0.5f0, 5f0), 1, N), randn(Float32, 10, N))
 
 @testset "population draws and model averaging" begin
     rng = MersenneTwister(6)
@@ -221,11 +224,18 @@ end
     system = model_selection_systems["B"]
     counts_obs = [74, 17, -1, 584, 63, 12, 9, 35, -1, -1, -1, 35, 17, -1, -1]
     y = encode_counts(counts_obs; censored = true)
-    ## Joint truncation: the null structure (class 1) has no draws inside the support, so it drops out
+    ## Truncation given the structure: the null structure (class 1) has no draws inside the support,
+    ## so its share is lost rather than redistributed over the other structures
     π = fill(1 / 64, 64)
     bma = sample_model_averaged_posterior(OutsideNPE(), y, π, 2000, system; counts_obs, rng)
-    @test length(bma.models) == 2000 && size(bma.θ, 2) == 2000
+    @test 1900 <= length(bma.models) < 2000 && size(bma.θ, 2) == length(bma.models)
     @test !any(bma.models .== 1)
+    @test all(1 .<= bma.alpha .<= 10)
+    ## A structure with most of its draws outside the support keeps the classifier's probability
+    π = zeros(64); π[2] = 0.5; π[33] = 0.5
+    bma = sample_model_averaged_posterior(PartialNPE(), y, π, 4000, system; counts_obs, rng)
+    @test length(bma.models) == 4000
+    @test abs(mean(bma.models .== 33) - 0.5) < 0.05
     @test all(1 .<= bma.alpha .<= 10)
     ## A structure with nothing inside the support returns no draws instead of failing
     empty = sample_conditional_population(OutsideNPE(), y, falses(6), 100, system; counts_obs)
