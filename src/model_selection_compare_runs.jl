@@ -1,6 +1,4 @@
 ## Compare the model-selection runs
-##
-## Each run is calibrated against its own prior, so simulation coverage is not a ranking of priors.
 include("mse_functions.jl")
 include("model_selection_functions.jl")
 

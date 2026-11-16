@@ -1,4 +1,4 @@
-## Software validation of the reference samplers: julia --project -t 12 src/reference_validation.jl [comparison] [coverage]
+## Software validation of the reference samplers
 include("mse_functions.jl")
 include("mcmc_functions.jl")
 BLAS.set_num_threads(1)

@@ -1,6 +1,4 @@
-## Monte Carlo stability of the real-data reference model average: repeat the enumeration of all
-## structures' marginal likelihoods by importance sampling under independent seeds.
-## Run from the repo root: MS_RUN=b4_g4x julia -t auto --project src/model_selection_reference_repeat.jl
+## Repeat the real-data reference model average under independent seeds
 include("mse_functions.jl")
 include("mcmc_functions.jl")
 include("model_selection_functions.jl")
@@ -36,8 +34,7 @@ for s in ["A", "B"], seed in seeds
     ref = reference_mixture(fits, counts_obs, system; model_prior = primary, B = n_draws, rng = Xoshiro(seed))
     material = ref.π .> 0.01
     sizes = vec(sum(enumerate_models(K), dims = 1))
-    ## Law of total variance over the structures holding 99.9% of the reference mass:
-    ## Var(N0) = E_m[Var(N0 | m)] + Var_m(E[N0 | m]), from each structure's importance-sampling draws
+    ## Law of total variance over the structures holding 99.9% of the reference mass
     order = sortperm(ref.π, rev = true)
     leading = order[1:searchsortedfirst(cumsum(ref.π[order]), 0.999)]
     per_structure = [Float64.(population_draws(fits[c].θ, counts_obs; system.censoring_lower, system.censoring_upper, rng = Xoshiro(hash((s, seed, c, :vd)))).N0) for c in leading]

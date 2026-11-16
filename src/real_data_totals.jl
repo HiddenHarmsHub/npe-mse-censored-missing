@@ -1,8 +1,4 @@
-## Expected hidden count λ0 = e^α, realised hidden count N0 and total population N for the
-## fixed-structure (all interactions) real-data fits, for the tables of the real-data section.
-## MCMC and NPE: N0 ~ Poisson(e^α) and censored cells imputed from their truncated Poisson, per draw.
-## NBE and MLE give intervals for α only, so their totals are N_obs + λ0 at the interval endpoints.
-## Run from the repo root: julia --project src/real_data_totals.jl
+## λ0, N0 and N for the fixed-structure real-data fits
 include("mse_functions.jl")
 include("model_selection_functions.jl")
 using CSV, DataFrames, Random, Statistics

@@ -369,9 +369,7 @@ end
 
 effective_draws(θ, models, K) = isempty(models) ? θ : reduce(hcat, [effective_parameters(t, model_mask(c, K)) for (t, c) in zip(eachcol(θ), models)])
 
-## Model-averaged posterior from q(m | y) q(θ | y, m). The structure is drawn from the classifier and kept,
-## and θ is redrawn given m until α lies in the intercept support, so the structure probabilities are the
-## classifier's. (Rejecting (m, θ) jointly would multiply them by each structure's acceptance rate.)
+## Model-averaged posterior: m from the classifier, then θ | m redrawn until α is inside the intercept support
 function sample_model_averaged_posterior(cnpe, y, π, B, system; counts_obs, lower = 1.0, upper = 10.0, max_rounds = 20, rng = Random.default_rng())
     K = system.K
     π = π ./ sum(π)

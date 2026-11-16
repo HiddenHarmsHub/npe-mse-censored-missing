@@ -224,8 +224,7 @@ end
     system = model_selection_systems["B"]
     counts_obs = [74, 17, -1, 584, 63, 12, 9, 35, -1, -1, -1, 35, 17, -1, -1]
     y = encode_counts(counts_obs; censored = true)
-    ## Truncation given the structure: the null structure (class 1) has no draws inside the support,
-    ## so its share is lost rather than redistributed over the other structures
+    ## The null structure has no draws inside the support, so its share is lost
     π = fill(1 / 64, 64)
     bma = sample_model_averaged_posterior(OutsideNPE(), y, π, 2000, system; counts_obs, rng)
     @test 1900 <= length(bma.models) < 2000 && size(bma.θ, 2) == length(bma.models)

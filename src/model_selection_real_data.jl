@@ -155,8 +155,7 @@ for s in ["A", "B"]
          prob_in_censoring_interval = system.censoring_upper > 0 ? mean(system.censoring_lower .<= replicated[i, :] .<= system.censoring_upper) : missing)
         for (i, cell) in enumerate(enumerate_all_combinations(K))]))
 
-    ## ---- MLE of every structure, with AIC and BIC; the MAP, all-interactions and literature structures
-    ## are also written separately (Wald intervals on α) ----
+    ## ---- MLE, AIC and BIC of every structure ----
     mle = DataFrame([merge((model = c, interactions = labels[c]),
                            fit_mle(counts_obs, model_mask(c, K); system.censoring_lower, system.censoring_upper, priors = coefficient_priors(run)))
                      for c in 1:n_models(K)])

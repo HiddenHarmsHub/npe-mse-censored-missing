@@ -21,8 +21,7 @@ function sample_parameters(
     return Float32.(vcat(intercept, betas, gammas))
 end
 
-## Training draw from the prior; with redraw_capped, parameter vectors with any log-rate above the simulator
-## cap are redrawn, so every training pair is a draw from the model (the prior truncated below the cap)
+## Training draw from the prior; redraw_capped redraws parameter vectors that reach the simulator cap
 function sample_training_parameters(K::Int; redraw_capped = false, kwargs...)
     θ = sample_parameters(K; kwargs...)
     redraw_capped || return θ

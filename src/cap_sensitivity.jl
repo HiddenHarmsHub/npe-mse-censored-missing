@@ -1,7 +1,4 @@
-## Evaluate the cap-sensitivity networks (src/cap_sensitivity_train.jl) against the shipped baseline networks on
-## the 984 benchmark datasets below the simulator cap with a validated reference fit: bias, median APE and
-## 95% coverage for λ0 = e^α, and the median absolute difference of each α quantile from the shipped network.
-## Run from the repo root: julia --project src/cap_sensitivity.jl
+## Compare the cap-sensitivity networks (cap_sensitivity_train.jl) with the shipped networks on the benchmark datasets
 include("mse_functions.jl")
 using CSV, DataFrames, Random, Statistics
 

@@ -295,8 +295,7 @@ comparison_df <- mcmc_df %>%
         values_to = "Value"
     )
 
-## Accuracy against the simulated truth: ratio of estimated to true λ0 = e^α by size of the hidden population, on the log scale
-## All three methods on the same datasets with a validated reference fit
+## Ratio of estimated to true λ0 by size of the hidden population
 ratio_by_size <- comparison_df %>%
     filter(Metric == "error", status != "failed") %>%
     mutate(

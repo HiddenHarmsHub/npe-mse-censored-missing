@@ -1,4 +1,4 @@
-## Reference posterior model probabilities for a stratified subset of the model-selection test sets
+## Reference model probabilities on a stratified subset of the test sets
 using Pkg; Pkg.activate(".")
 using Distributed, SlurmClusterManager
 addprocs(SlurmManager(); exeflags=["--threads", "1", "--project"])

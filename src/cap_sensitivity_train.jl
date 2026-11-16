@@ -1,9 +1,4 @@
-## Sensitivity of the baseline networks (five lists censored on [0, 10], width 256, three hidden layers) to the
-## simulator cap. About 1% of prior draws have a log-rate above 43; the shipped networks keep these training
-## pairs with the rates capped. Here the NBE and NPE are retrained twice with the same settings:
-##   redraw:  parameter vectors that reach the cap are redrawn, so every training pair is a draw from the model
-##   reseed:  as the shipped networks (capped pairs kept) with a new seed, the seed-to-seed reference
-## Slurm: sbatch slurm/cap_sensitivity.sbatch. Evaluate locally with src/cap_sensitivity.jl.
+## Retrain the baseline networks with capped parameter vectors redrawn (redraw) and as shipped under a new seed (reseed)
 using Pkg; Pkg.activate(".")
 using Distributed, SlurmClusterManager
 addprocs(SlurmManager(); exeflags = ["--threads", get(ENV, "SLURM_CPUS_PER_TASK", "1"), "--project"])

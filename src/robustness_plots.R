@@ -5,7 +5,7 @@ input_dir <- file.path("output", "robustness")
 figures_dir <- file.path("output", "figures")
 dir.create(figures_dir, showWarnings = FALSE, recursive = TRUE)
 
-## Fixed categorical order, validated for colour-vision deficiency on a light surface; shapes as secondary encoding
+## Fixed method order and colours; shapes as secondary encoding
 method_labels <- c(npe = "NPE", nbe = "NBE", exact = "Reference posterior", npe_nis = "NPE with importance sampling", bma = "Model averaged")
 method_colours <- c("NPE" = "#eb6834", "NBE" = "#8b5cc7", "Reference posterior" = "#1baf7a", "NPE with importance sampling" = "#eda100", "Model averaged" = "#2a78d6")
 method_shapes <- c("NPE" = 16, "NBE" = 17, "Reference posterior" = 15, "NPE with importance sampling" = 18, "Model averaged" = 4)

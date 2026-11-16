@@ -1,6 +1,5 @@
 #!/bin/bash
-## Submit the robustness study with dependencies, from the repository root: bash slurm/submit_robustness.sh
-## Every stage skips finished work, so resubmitting only fills in what is missing.
+## Submit the robustness study with dependencies
 set -euo pipefail
 cd "$(dirname "$0")/.."
 mkdir -p logs

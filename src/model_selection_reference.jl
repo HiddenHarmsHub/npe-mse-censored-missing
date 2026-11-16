@@ -1,4 +1,4 @@
-## Reference posterior model probabilities by enumerating every structure, with marginal likelihoods by importance sampling
+## Reference model probabilities by enumerating every structure
 import Optim
 
 ## Log marginal likelihood of structure `mask`, integrating over the active parameters only.

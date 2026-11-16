@@ -1,8 +1,4 @@
-## Share of conditional-NPE draws with the intercept inside its prior support, A_m, for each structure.
-## Rejecting (m, θ) jointly multiplies the classifier's structure probabilities by A_m; this measures how far
-## that moves them, by the total variation distance between π and π·A_m (renormalised), on the real data and
-## on a random subset of the model-selection test sets.
-## Run from the repo root: MS_RUN=b4_g4x julia --project src/model_selection_support_acceptance.jl
+## Intercept-support acceptance rate A_m of each structure and the TV distance between π and π·A_m
 include("mse_functions.jl")
 include("model_selection_functions.jl")
 using CSV, DataFrames, Random, Statistics
