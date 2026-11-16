@@ -1,50 +1,72 @@
-## Here we run use MCMC to infer model parameters and compare those
-## with that obtained through NBE
+## Reference posteriors (NUTS with remediation
 using Pkg; Pkg.activate(".")
 using Distributed, SlurmClusterManager
 addprocs(SlurmManager(); exeflags=["--threads", "1", "--project"])
 
 @everywhere include("mse_functions.jl")
 @everywhere include("mcmc_functions.jl")
+@everywhere using Logging
+@everywhere disable_logging(Logging.Info)  # Turing logs every initial step size
 
 
 test_path = joinpath("output", "test_data")
 n_lists = 5
-test_data, test_pars = load_test_data(test_path, n_lists, 0, 10)
+censoring_lower = 0
+censoring_upper = 10
+test_counts, test_pars = load_test_counts(test_path, n_lists, censoring_lower, censoring_upper)
 
-mcmc_samples_path = joinpath("output", "mcmc_samples")
-mcmc_summary_path = joinpath("output", "mcmc_summary")
-mkpath(mcmc_samples_path)
-mkpath(mcmc_summary_path)
+benchmark_idx = select_benchmark_datasets(test_pars, test_counts; n = 1000)
+CSV.write(
+    joinpath("output", "benchmark_datasets.csv"),
+    DataFrame(
+        dataset = benchmark_idx,
+        intercept = test_pars[1, benchmark_idx],
+        n_censored = vec(sum(test_counts[:, benchmark_idx] .== -1, dims = 1)),
+        capped = is_capped.(eachcol(test_pars[:, benchmark_idx]))
+    )
+)
+
+paths = (
+    mcmc_samples = joinpath("output", "mcmc_samples"),
+    mcmc_summary = joinpath("output", "mcmc_summary"),
+    mcmc_diagnostics = joinpath("output", "mcmc_diagnostics"),
+    irls_samples = joinpath("output", "irls_samples"),
+    irls_summary = joinpath("output", "irls_summary"),
+    irls_diagnostics = joinpath("output", "irls_diagnostics"),
+    is_summary = joinpath("output", "is_summary")
+)
+mkpath.(values(paths))
 
 overwrite_files = false
-test_idx = 1:size(test_data, 2)
+test_idx = benchmark_idx
 
 if !overwrite_files
     test_idx = filter(
         slice_idx ->  begin
-            samples_file = joinpath(mcmc_samples_path, "mcmc_test_results_$slice_idx.csv")
-            summary_file = joinpath(mcmc_summary_path, "mcmc_test_summary_$slice_idx.csv")
-            !(isfile(samples_file) && isfile(summary_file))
+            !isfile(joinpath(paths.is_summary, "is_test_summary_$slice_idx.csv"))
         end,
-        collect(test_idx)
+        test_idx
     )
 end
 
 
+## A failing dataset is reported and left for the next run, which skips completed datasets
 pmap(
     slice_idx ->  begin
         wid = myid()
         println("Worker $wid running ")
-        run_mcmc_test_slice(
-            slice_idx,
-            n_lists, 
-            test_data, 
-            test_pars; 
-            num_chains = 4, 
-            samples_path = mcmc_samples_path, 
-            summary_path = mcmc_summary_path
-        )
+        try
+            run_mcmc_test_slice(
+                slice_idx,
+                test_counts,
+                test_pars;
+                censoring_lower = censoring_lower,
+                censoring_upper = censoring_upper,
+                paths = paths
+            )
+        catch e
+            println("Dataset $slice_idx failed: ", sprint(showerror, e))
+        end
     end,
     test_idx
 )

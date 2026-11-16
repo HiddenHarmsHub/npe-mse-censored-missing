@@ -1,0 +1,2 @@
+max_rhat,min_ess_bulk,min_ess_tail,n_divergent,n_rejected,treedepth_hits,min_bfmi,stage,time,status
+1.0001734459211504,34847.06696950346,21121.022667893783,2,629,0,0.9721268158211561,2,232.860899893,failed

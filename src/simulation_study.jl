@@ -15,23 +15,34 @@ test_size = 10_000
 test_path = joinpath("output", "test_data")
 mkpath(test_path)
 list_sizes = [3, 4, 5, 6, 10, 15]
-Random.seed!(42)  # For reproducibility
-for K in list_sizes
-    outfile = joinpath(test_path, "test_data_$(K).bson")
-    if isfile(outfile)
-        println("Test data for K=$K already exists at $outfile; skipping.")
-        continue
+## Raw counts (Z_counts) are stored alongside the log-counts for the MCMC samplers, for K <= 10 only
+counts_sizes = filter(<=(10), list_sizes)
+test_files = [joinpath(test_path, "test_data_$(K).bson") for K in list_sizes]
+if all(isfile, test_files) && all(K -> haskey(BSON.load(joinpath(test_path, "test_data_$(K).bson")), :Z_counts), counts_sizes)
+    println("Test data with raw counts already exists; skipping.")
+else
+    Random.seed!(42)  # For reproducibility
+    for (K, outfile) in zip(list_sizes, test_files)
+        params = [sample_parameters(K) for _ in 1:test_size]
+        Z_counts = [simulate_data(params[i], 1, censoring_upper=0, log_transform=false) for i in 1:test_size]
+
+        # Concatenate into matrices
+        params = hcat(params...)
+        Z_counts = Int.(hcat(Z_counts...))
+        Z_test = Float32.(log.(Z_counts .+ 1))
+
+        if isfile(outfile)
+            old = BSON.load(outfile)
+            (old[:params] == params && old[:Z_test] == Z_test) || error("Regenerated test data for K=$K differs from $outfile.")
+        end
+
+        if K in counts_sizes
+            BSON.@save outfile Z_test Z_counts params
+        else
+            BSON.@save outfile Z_test params
+        end
+        println("Generated test data for K=$K")
     end
-
-    params = [sample_parameters(K) for _ in 1:test_size]
-    Z_test = [simulate_data(params[i], 1, censoring_upper=0) for i in 1:test_size]
-
-    # Concatenate into matrices
-    params = hcat(params...)
-    Z_test = hcat(Z_test...)
-
-    BSON.@save outfile Z_test params
-    println("Generated test data for K=$K")
 end
 
 
@@ -55,6 +66,8 @@ end
     npe_estimates = map(eachcol(test_data)) do x
         boundedposteriorquantile(model_npe, reshape(x, :, 1), [0.025, 0.5, 0.975], 5000, 1.0, 10.0)[1, :]
     end |> x -> hcat(x...)
+    n_failed = sum(isnan, npe_estimates[2, :])
+    n_failed > 0 && println("NPE $model_file: no posterior draws inside the intercept prior support for $n_failed datasets")
 
 
     APE_NBE = abs.((estimated_pars_nbe .- test_pars) ./ test_pars)
@@ -106,7 +119,7 @@ NPE_estimator = load_model_npe(
     5, 
     256, 
     3,
-    10000,
+    train_size_default,
     0, 
     10, 
     1, 

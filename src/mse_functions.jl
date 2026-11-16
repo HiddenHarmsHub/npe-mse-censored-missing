@@ -1,7 +1,13 @@
-using Distributions, Flux, BSON, DataFrames, CSV, Combinatorics, Folds
+using Distributions, Flux, BSON, DataFrames, CSV, Combinatorics, Folds, Random
 
 import NeuralEstimators: sampleposterior
 using NeuralEstimators
+include("nbe_layers.jl")
+
+## Training budget for the NBE and NPE models (simulations per epoch is the train_size in model filenames).
+const train_size_default = 200_000
+const training_settings = (epochs = 100, stopping_epochs = 15, K_val = 20_000, batchsize = 256, learning_rate = 1e-3, input_scale = 0.1)
+const npe_num_coupling_layers = 10
 
 function sample_parameters(
     K::Int; 
@@ -15,6 +21,16 @@ function sample_parameters(
     return Float32.(vcat(intercept, betas, gammas))
 end
 
+## Training draw from the prior; redraw_capped redraws parameter vectors that reach the simulator cap
+function sample_training_parameters(K::Int; redraw_capped = false, kwargs...)
+    θ = sample_parameters(K; kwargs...)
+    redraw_capped || return θ
+    while is_capped(θ)
+        θ = sample_parameters(K; kwargs...)
+    end
+    return θ
+end
+
 function enumerate_two_digit_numbers(K::Int)
     numbers = Vector{Int64}[]
     for i in 1:K-1
@@ -25,8 +41,7 @@ function enumerate_two_digit_numbers(K::Int)
     return numbers
 end
 
-## Custom Poisson sampler to avoid overflow
-## rough error point is around logλ = 43.669
+## Poisson sampler with the log-rate capped to avoid overflow (around logλ = 43.669)
 function rpois(logλ; logλ_max = 43.0)
     if logλ > logλ_max  
         return rand(Poisson(exp(logλ_max)))
@@ -133,7 +148,7 @@ function compute_digit_pairs(n::String; filter_terms = nothing)
     return digits, pairs
 end
 
-function construct_MLP(width::Int, n_hidden::Int, n_lists::Int, censoring::Bool = false, intercept_support = nothing)
+function construct_MLP(width::Int, n_hidden::Int, n_lists::Int, censoring::Bool = false, intercept_support = nothing; input_scale = nothing)
     n_data = 2^n_lists - 1
     n_pars = 1 + n_lists + binomial(n_lists, 2)  # intercept + betas + gammas
     if censoring
@@ -151,54 +166,72 @@ function construct_MLP(width::Int, n_hidden::Int, n_lists::Int, censoring::Bool 
         final_layer = Dense(width, n_pars)
     end
 
+    input_layer = isnothing(input_scale) ? () : (Flux.Scale(fill(Float32(input_scale), n_data), false),)
     return Chain(
+        input_layer...,
         Dense(n_data, width, relu),
         [Dense(width, width, relu) for _ in 1:n_hidden]...,
         final_layer
     )
 end
 
+## NBE network: one MLP whose final layer gives the stacked 0.025, 0.5 and 0.975 quantiles of all parameters
+function construct_quantile_MLP(width::Int, n_hidden::Int, n_lists::Int, censoring::Bool = false, intercept_support = nothing; input_scale = nothing, n_quantiles = 3)
+    n_data = 2^n_lists - 1
+    n_pars = 1 + n_lists + binomial(n_lists, 2)  # intercept + betas + gammas
+    if censoring
+        n_data *= 2  # Double the input size for censored data (U and W)
+    end
 
-function train_model_mlp(n_lists, width, n_hidden, train_size; m = 1, censoring_lower = 0, censoring_upper = 0, savepath = nothing, intercept_dist = Uniform(1, 10))
-    estimator_mdl_str = "model_$(n_lists)_$(width)_$(n_hidden)_$(train_size)_$(censoring_lower)_$(censoring_upper)_$(m).bson"
-    ci_mdl_str = "model_ci_$(n_lists)_$(width)_$(n_hidden)_$(train_size)_$(censoring_lower)_$(censoring_upper)_$(m).bson"
+    input_layer = isnothing(input_scale) ? () : (Flux.Scale(fill(Float32(input_scale), n_data), false),)
+    return Chain(
+        input_layer...,
+        Dense(n_data, width, relu),
+        [Dense(width, width, relu) for _ in 1:n_hidden]...,
+        Dense(width, n_quantiles * n_pars),
+        n_quantiles == 3 ? MonotoneQuantiles(n_pars, intercept_support) : MonotoneQuantilesQ(n_pars, n_quantiles, intercept_support)
+    )
+end
+
+
+## NBE: one network for the 0.025, 0.5 and 0.975 posterior quantiles of every parameter
+function train_model_mlp(
+    n_lists, width, n_hidden, train_size;
+    m = 1, censoring_lower = 0, censoring_upper = 0, savepath = nothing, intercept_dist = Uniform(1, 10),
+    beta_dist = Normal(0, 4), gamma_dist = Normal(0, 4), probs = nbe_probs, filename = nothing,
+    epochs = 100, stopping_epochs = 5, K_val = train_size ÷ 5 + 1, batchsize = 32, learning_rate = 5e-4,
+    input_scale = nothing, training_path = nothing, redraw_capped = false
+)
+    estimator_mdl_str = isnothing(filename) ? "model_$(n_lists)_$(width)_$(n_hidden)_$(train_size)_$(censoring_lower)_$(censoring_upper)_$(m).bson" : filename
 
     intercept_support = ifelse(typeof(intercept_dist) <: Uniform, params(intercept_dist), nothing)
 
     all_combinations = enumerate_all_combinations(n_lists)
     two_digit_numbers = enumerate_two_digit_numbers(n_lists)
 
-    sample_nbe(n_reps) = hcat([sample_parameters(n_lists, intercept_dist = intercept_dist) for _ in 1:n_reps]...)
+    sample_nbe(n_reps) = hcat([sample_training_parameters(n_lists; intercept_dist, beta_dist, gamma_dist, redraw_capped) for _ in 1:n_reps]...)
     function simulate_nbe(θ, m)
         Z = Folds.map(eachcol(θ)) do params
             simulate_data(params, m, censoring_lower = censoring_lower, censoring_upper = censoring_upper, all_combinations = all_combinations, two_digit_numbers = two_digit_numbers)
         end 
         return hcat(Z...)
     end
-    network = construct_MLP(width, n_hidden, n_lists, censoring_upper > 0, intercept_support)
-    estimator = PointEstimator(network)
 
-    ci_estimator = IntervalEstimator(network)
+    network = construct_quantile_MLP(width, n_hidden, n_lists, censoring_upper > 0, intercept_support; input_scale = input_scale, n_quantiles = length(probs))
+    estimator = PointEstimator(network)
 
     estimator = train(
         estimator, 
         sample_nbe, 
-        simulate_nbe, 
-        K = train_size,
-        m = m
-    )
-
-    ci_estimator = train(
-        ci_estimator, 
-        sample_nbe, 
-        simulate_nbe, 
-        K = train_size,
-        m = m
+        simulate_nbe;
+        loss = (θ̂, θ) -> quantileloss(θ̂, θ, probs),
+        K = train_size, K_val = K_val, m = m, epochs = epochs, stopping_epochs = stopping_epochs, batchsize = batchsize,
+        optimiser = Flux.setup(Adam(learning_rate), estimator),
+        savepath = training_path
     )
 
     if !isnothing(savepath) 
         BSON.@save joinpath(savepath, estimator_mdl_str) estimator
-        BSON.@save joinpath(savepath, ci_mdl_str) ci_estimator
         return nothing
     else
         return estimator
@@ -216,6 +249,45 @@ function load_test_data(test_path, list_size, censoring_lower = 0, censoring_upp
         return Float32.(vcat(U, W)), test_data[:params]
     end
     return test_data[:Z_test], test_data[:params]
+end
+
+## Integer counts for the MCMC samplers, with -1 marking censored cells
+function load_test_counts(test_path, list_size, censoring_lower = 0, censoring_upper = 0)
+    test_data = BSON.load(joinpath(test_path, "test_data_$list_size.bson"))
+    haskey(test_data, :Z_counts) || error("test_data_$list_size.bson has no raw counts; regenerate it with simulation_study.jl.")
+    Z = test_data[:Z_counts]
+    if censoring_upper > 0
+        Z = ifelse.(censoring_lower .<= Z .<= censoring_upper, -1, Z)
+    end
+    return Z, test_data[:params]
+end
+
+## True if any cell's log-rate exceeds the cap used by rpois
+function is_capped(pars; logλ_max = 43.0)
+    K = Int(-0.5 + (sqrt(8 * length(pars) - 7) / 2))
+    return maximum(one_hot_encode_parameters(K) * pars) > logλ_max
+end
+
+## Proportional stratified sample by intercept band and number of censored cells
+function select_benchmark_datasets(test_pars, test_counts; n = 1000, n_bands = 5, intercept_support = (1.0, 10.0), seed = 1)
+    rng = Random.MersenneTwister(seed)
+    N = size(test_pars, 2)
+    width = (intercept_support[2] - intercept_support[1]) / n_bands
+    band = clamp.(floor.(Int, (test_pars[1, :] .- intercept_support[1]) ./ width), 0, n_bands - 1)
+    n_censored = vec(sum(test_counts .== -1, dims = 1))
+    censored_group = searchsortedfirst.(Ref(quantile(n_censored, [1/3, 2/3])), n_censored)
+    strata = collect(zip(band, censored_group))
+
+    groups = Dict(s => findall(==(s), strata) for s in unique(strata))
+    keys_sorted = sort(collect(keys(groups)))
+    exact = [n * length(groups[s]) / N for s in keys_sorted]
+    alloc = floor.(Int, exact)
+    for i in sortperm(exact .- alloc, rev = true)[1:(n - sum(alloc))]
+        alloc[i] += 1
+    end
+
+    selected = vcat([shuffle(rng, groups[s])[1:a] for (s, a) in zip(keys_sorted, alloc)]...)
+    return sort(selected)
 end
 
 function get_param_names(n_lists)
@@ -247,14 +319,19 @@ function load_silverman_data(K::Int = 5)
     return output
 end
 
-function load_model_nbe(n_lists, width, n_hidden, train_size, censoring_lower, censoring_upper, m, models_path)
-    mdl_str = "model_$(n_lists)_$(width)_$(n_hidden)_$(train_size)_$(censoring_lower)_$(censoring_upper)_$m.bson"
-    if isfile(joinpath(models_path, mdl_str))
-        model = BSON.load(joinpath(models_path, mdl_str))
-        return model[:estimator]
-    else
-        error("Model file $(mdl_str) not found in $(models_path).")
+## NBE outputs the stacked quantiles [q0.025; q0.5; q0.975], each of length n_pars.
+const nbe_probs = [0.025, 0.5, 0.975]
+quantile_rows(q, r) = q isa AbstractVector ? q[r] : q[r, :]
+function nbe_view(estimator, ci::Bool)
+    return function (Z)
+        q = estimator(Z)
+        n = size(q, 1) ÷ 3
+        ci ? vcat(quantile_rows(q, 1:n), quantile_rows(q, (2n + 1):3n)) : quantile_rows(q, (n + 1):2n)
     end
+end
+
+function load_model_nbe(n_lists, width, n_hidden, train_size, censoring_lower, censoring_upper, m, models_path)
+    load_model_nbe(n_lists, width, n_hidden, train_size, censoring_lower, censoring_upper, m, models_path, false)
 end
 
 function load_model_npe(n_lists, width, n_hidden, train_size, censoring_lower, censoring_upper, m, models_path; encoding_dim = 128)
@@ -268,29 +345,16 @@ function load_model_npe(n_lists, width, n_hidden, train_size, censoring_lower, c
 end
 
 function load_model_nbe(n_lists, width, n_hidden, train_size, censoring_lower, censoring_upper, m, models_path, ci::Bool)
-    if !ci
-        load_model_nbe(n_lists, width, n_hidden, train_size, censoring_lower, censoring_upper, m, models_path)
-    else
-        mdl_str = "model_ci_$(n_lists)_$(width)_$(n_hidden)_$(train_size)_$(censoring_lower)_$(censoring_upper)_$m.bson"
-        if isfile(joinpath(models_path, mdl_str))
-            model = BSON.load(joinpath(models_path, mdl_str))
-            return model[:ci_estimator]
-        else
-            error("Model file $(mdl_str) not found in $(models_path).")
-        end
-    end 
+    mdl_str = "model_$(n_lists)_$(width)_$(n_hidden)_$(train_size)_$(censoring_lower)_$(censoring_upper)_$m.bson"
+    return load_model_nbe(ci ? "ci_" * mdl_str : mdl_str, models_path)
 end
 
+## Accepts the old interval filename (model_ci_...) for the bounds and the model filename for the median
 function load_model_nbe(mdl_str, models_path)
-    if isfile(joinpath(models_path, mdl_str))
-        model = BSON.load(joinpath(models_path, mdl_str))
-        if occursin("ci_", mdl_str)
-            return model[:ci_estimator]
-        end
-        return model[:estimator]
-    else
-        error("Model file $(mdl_str) not found in $(models_path).")
-    end
+    ci = occursin("ci_", mdl_str)
+    file = joinpath(models_path, replace(mdl_str, "ci_" => ""))
+    isfile(file) || error("Model file $(basename(file)) not found in $(models_path).")
+    return nbe_view(BSON.load(file)[:estimator], ci)
 end
 
 function load_model_nbe(; 
@@ -330,6 +394,14 @@ function load_king_data()
 end
 
 
+## King data as integer counts in cell order, with -1 for the suppressed (censored) cells
+function load_king_counts()
+    king = DataFrame(CSV.File(joinpath("data", "king.csv")))
+    lookup = Dict(string(g) => c for (g, c) in zip(king.group, king.count))
+    return [let v = get(lookup, replace(cell, "," => ""), "0"); v == "missing" ? -1 : parse(Int, string(v)) end
+            for cell in enumerate_all_combinations(4)]
+end
+
 function one_hot_encode_parameters(K::Int)
     n_gamma = binomial(K, 2)
     n_pars = 1 + K + n_gamma
@@ -350,8 +422,15 @@ function one_hot_encode_parameters(K::Int)
     return one_hot_matrix
 end
 
-function train_npe(n_lists, width, n_hidden, encoding_dim, train_size; m = 1, censoring_lower = 0, censoring_upper = 0, savepath = nothing, intercept_dist = Uniform(1, 10))
-    estimator_mdl_str = "model_$(n_lists)_$(width)_$(n_hidden)_$(encoding_dim)_$(train_size)_$(censoring_lower)_$(censoring_upper)_$(m).bson"
+## The training keywords default to the settings used for the shipped NPE models
+function train_npe(
+    n_lists, width, n_hidden, encoding_dim, train_size;
+    m = 1, censoring_lower = 0, censoring_upper = 0, savepath = nothing, intercept_dist = Uniform(1, 10),
+    beta_dist = Normal(0, 4), gamma_dist = Normal(0, 4), filename = nothing,
+    epochs = 200, stopping_epochs = 5, K_val = train_size ÷ 5 + 1, batchsize = 32, learning_rate = 5e-4,
+    num_coupling_layers = 6, input_scale = nothing, training_path = nothing, redraw_capped = false
+)
+    estimator_mdl_str = isnothing(filename) ? "model_$(n_lists)_$(width)_$(n_hidden)_$(encoding_dim)_$(train_size)_$(censoring_lower)_$(censoring_upper)_$(m).bson" : filename
     n_data = 2^n_lists - 1
     n_pars = 1 + n_lists + binomial(n_lists, 2)  # intercept + betas + gammas
     if censoring_upper > 0
@@ -361,7 +440,7 @@ function train_npe(n_lists, width, n_hidden, encoding_dim, train_size; m = 1, ce
     all_combinations = enumerate_all_combinations(n_lists)
     two_digit_numbers = enumerate_two_digit_numbers(n_lists)
 
-    sample_nbe(n_reps) = hcat([sample_parameters(n_lists, intercept_dist = intercept_dist) for _ in 1:n_reps]...)
+    sample_nbe(n_reps) = hcat([sample_training_parameters(n_lists; intercept_dist, beta_dist, gamma_dist, redraw_capped) for _ in 1:n_reps]...)
     function simulate_nbe(θ, m)
         Z = Folds.map(eachcol(θ)) do params
             simulate_data(params, m, censoring_lower = censoring_lower, censoring_upper = censoring_upper, all_combinations = all_combinations, two_digit_numbers = two_digit_numbers)
@@ -369,23 +448,31 @@ function train_npe(n_lists, width, n_hidden, encoding_dim, train_size; m = 1, ce
         return hcat(Z...)
     end
     
+    ## Optional per-input rescaling of the log-counts (which reach ~43), initialised at input_scale
+    input_layer = isnothing(input_scale) ? () : (Flux.Scale(fill(Float32(input_scale), n_data), false),)
     network = Chain(
+        input_layer...,
         Dense(n_data, width, relu),
         [Dense(width, width, relu) for _ in 1:n_hidden]...,
         Dense(width, encoding_dim)
     )
-    
-    
-    q = NormalisingFlow(n_pars, encoding_dim)
+
+
+    q = NormalisingFlow(n_pars, encoding_dim; num_coupling_layers = num_coupling_layers)
     estimator = PosteriorEstimator(q, network)
-    
+
     estimator = train(
-        estimator, 
-        sample_nbe, 
-        simulate_nbe, 
+        estimator,
+        sample_nbe,
+        simulate_nbe,
         K = train_size,
+        K_val = K_val,
         m = m,
-        epochs = 200
+        epochs = epochs,
+        stopping_epochs = stopping_epochs,
+        batchsize = batchsize,
+        optimiser = Flux.setup(Adam(learning_rate), estimator),
+        savepath = training_path
     )
     
     if !isnothing(savepath) 
@@ -418,11 +505,21 @@ function boundedsampleposterior(
     lower::Real,
     upper::Real;
     param_idx::Integer = 1,
+    max_rounds::Integer = 20,
     kwargs...
 )
-    samples = sampleposterior(estimator, Z, N; kwargs...)
-    mask = (samples[param_idx, :] .>= lower) .& (samples[param_idx, :] .<= upper)
-    return samples[:, mask]
+    ## Rejection sampling from the approximate posterior truncated to the prior support
+    accepted = Matrix{Float32}[]
+    n_accepted = 0
+    for _ in 1:max_rounds
+        samples = sampleposterior(estimator, Z, N; kwargs...)
+        keep = samples[:, (samples[param_idx, :] .>= lower) .& (samples[param_idx, :] .<= upper)]
+        push!(accepted, keep)
+        n_accepted += size(keep, 2)
+        n_accepted >= N && break
+    end
+    samples = reduce(hcat, accepted)
+    return samples[:, 1:min(N, size(samples, 2))]
 end
 
 function boundedposteriorquantile(
@@ -436,6 +533,8 @@ function boundedposteriorquantile(
     kwargs...
 )
     samples = boundedsampleposterior(estimator, Z, N, lower, upper; param_idx=param_idx, kwargs...)
+    ## No draw inside the prior support: the approximation has failed for this dataset
+    isempty(samples) && return fill(NaN32, size(samples, 1), length(probs))
     return posteriorquantile(samples, probs)
 end
 

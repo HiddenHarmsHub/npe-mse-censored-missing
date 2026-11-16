@@ -1,14 +1,16 @@
+## Timing of inference and training, run as two jobs
 using Pkg; Pkg.activate(".")
 using Distributed, SlurmClusterManager
-addprocs(SlurmManager(); exeflags=["--threads", "1", "--project"])
+part = isempty(ARGS) ? "inference" : ARGS[1]
+part == "inference" && addprocs(SlurmManager(); exeflags=["--threads", "1", "--project"])
 
 @everywhere using Random
 @everywhere include("mse_functions.jl")
 @everywhere include("mcmc_functions.jl")
 
-@everywhere function get_nbe_estimates(nbe_model, nbe_model_ci, test_data, slice_idx)
+## One forward pass of the joint NBE gives the median and the 95% interval
+@everywhere function get_nbe_estimates(nbe_model, test_data, slice_idx)
     nbe_model(test_data[:, slice_idx])
-    nbe_model_ci(test_data[:, slice_idx])
 end
 
 @everywhere function time_function(fn, args)
@@ -21,7 +23,7 @@ end
     n_lists = 5
     width = 256
     n_hidden = 3
-    train_size = 10000
+    train_size = train_size_default
     train_nbe() = train_model_mlp(
         n_lists, 
         width, 
@@ -31,7 +33,8 @@ end
         censoring_lower = 0, 
         censoring_upper = 10, 
         savepath = nothing, 
-        intercept_dist = Uniform(1, 10)
+        intercept_dist = Uniform(1, 10);
+        training_settings...
     )
 
     encoding_dim = 128
@@ -45,17 +48,15 @@ end
         m = 1,
         censoring_lower = 0,
         censoring_upper = 10,
-        savepath = nothing
+        savepath = nothing,
+        num_coupling_layers = npe_num_coupling_layers;
+        training_settings...
     )
 
-    train_nbe() ## warmup
-    train_npe_fixed() ## warmup
-    n_runs = 10
+    ## One run each: a run takes hours, so compilation is a negligible part of it
     train_df = DataFrame()
-    for _ in 1:n_runs
-        push!(train_df, (method = "NBE", train_time = time_function(train_nbe, ())))
-        push!(train_df, (method = "NPE", train_time = time_function(train_npe_fixed, ())))
-    end
+    push!(train_df, (method = "NBE", train_time = time_function(train_nbe, ()), threads = Threads.nthreads()))
+    push!(train_df, (method = "NPE", train_time = time_function(train_npe_fixed, ()), threads = Threads.nthreads()))
     mkpath(joinpath("output", "speed_comparisons"))
     CSV.write(
         joinpath("output", "speed_comparisons", "train_time_comparison.csv"),
@@ -70,6 +71,8 @@ end
     npe_models_path = joinpath("output", "models_npe")
     test_data_path = joinpath("output", "test_data")
     test_data, test_pars = load_test_data(test_data_path, n_lists, 0, 10)
+    test_counts, _ = load_test_counts(test_data_path, n_lists, 0, 10)
+    X = one_hot_encode_parameters(n_lists)
 
     speed_comparison_path = joinpath("output", "speed_comparisons")
     mkpath(speed_comparison_path)
@@ -78,35 +81,14 @@ end
         5, 
         256, 
         3,
-        10000,
+        train_size_default,
         0, 
         10, 
         1, 
         npe_models_path
     )
 
-    nbe_model = load_model_nbe(
-        5,
-        256,
-        3,
-        10000,
-        0,
-        10,
-        1,
-        nbe_models_path
-    )
-
-    nbe_model_ci = load_model_nbe(
-        5,
-        256,
-        3,
-        10000,
-        0,
-        10,
-        1,
-        nbe_models_path,
-        true
-    )
+    nbe_model = BSON.load(joinpath(nbe_models_path, "model_5_256_3_$(train_size_default)_0_10_1.bson"))[:estimator]
 
     out = DataFrame(
         dataset = Int64[],
@@ -116,10 +98,10 @@ end
     )
 
     ## warm up first
-    nbe_time = time_function(get_nbe_estimates, (nbe_model, nbe_model_ci, test_data, slice_idx))
+    nbe_time = time_function(get_nbe_estimates, (nbe_model, test_data, slice_idx))
     
     for _ in 1:n_runs
-        nbe_time = time_function(get_nbe_estimates, (nbe_model, nbe_model_ci, test_data, slice_idx))
+        nbe_time = time_function(get_nbe_estimates, (nbe_model, test_data, slice_idx))
         push!(out, (
             dataset = slice_idx,
             method = "NBE",
@@ -129,21 +111,31 @@ end
     end
 
     iterations_list = 1000 * 2 .^ collect(0:5)
+    ## NUTS with the remediated settings that produced most validated reference fits (stage 1), on a shorter sweep
+    mcmc_iterations = 1000 * 2 .^ collect(0:3)
+    n_runs_mcmc = 3
+    stage = nuts_stages[2]
 
     for (i, num_iterations) in enumerate(iterations_list)
-        println("Benchmarking MCMC with $num_iterations iterations...")
-        run_mcmc(slice_idx) = run_mcmc_test_slice(slice_idx, n_lists, test_data, test_pars, num_chains = 4, samples_path = nothing, summary_path = nothing, n_iterations = num_iterations)
-        
-        i == 1 && time_function(run_mcmc, slice_idx) ## warmup
+        if num_iterations in mcmc_iterations
+            println("Benchmarking MCMC with $num_iterations iterations...")
+            run_mcmc(slice_idx) = fit_nuts(
+                test_counts[:, slice_idx], X; censoring_lower = 0, censoring_upper = 10,
+                n_adapts = stage.n_adapts, n_samples = num_iterations, n_chains = 4, δ = stage.δ,
+                max_depth = stage.max_depth, metric = stage.metric, parameterisation = stage.parameterisation
+            )
 
-        for _ in 1:n_runs
-            mcmc_time = time_function(run_mcmc, slice_idx)        
-            push!(out, (
-                dataset = slice_idx,
-                method = "MCMC",
-                iterations = num_iterations,
-                time = mcmc_time
-            ))
+            i == 1 && time_function(run_mcmc, slice_idx) ## warmup
+
+            for _ in 1:n_runs_mcmc
+                mcmc_time = time_function(run_mcmc, slice_idx)
+                push!(out, (
+                    dataset = slice_idx,
+                    method = "MCMC",
+                    iterations = num_iterations,
+                    time = mcmc_time
+                ))
+            end
         end
 
         run_npe(slice_idx) = sampleposterior(npe_model, reshape(test_data[:, slice_idx], :, 1), num_iterations)
@@ -170,26 +162,33 @@ end
 
 
 
+if part == "inference"
+
 test_data, test_pars = load_test_data(joinpath("output", "test_data"), 5, 0, 10)
 
 
+## Datasets that hit the simulator cap are not draws from the model (and are excluded from calibration)
 Random.seed!(42)
 n_datasets_to_sample = 100
 datasets_to_sample = Int64[]
 while length(datasets_to_sample) < n_datasets_to_sample
     candidate = rand(1:size(test_data, 2))
-    if !(candidate in datasets_to_sample)
+    if !(candidate in datasets_to_sample) && !is_capped(Float64.(test_pars[:, candidate]))
         push!(datasets_to_sample, candidate)
     end
 end
 savepath = joinpath("output", "speed_comparisons")
+## The selection is written out so the analysis uses only these datasets (the folder may hold others)
+mkpath(savepath)
+CSV.write(joinpath(savepath, "datasets.csv"), DataFrame(dataset = sort(datasets_to_sample)))
 datasets_to_sample = filter(datasets_to_sample) do idx
     !isfile(joinpath(savepath, "speed_comparison_dataset_$(idx).csv"))
 end
 
 pmap(run_speed_comparison, datasets_to_sample)
 
-
-## also run train time comparison
-
-train_time_comparison()
+elseif part == "training"
+    train_time_comparison()
+else
+    error("Unknown part $part; use inference or training.")
+end
